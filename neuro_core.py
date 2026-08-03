@@ -1,5 +1,6 @@
 """Minimal, framework-independent Neuro Core foundation."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from uuid import uuid4
 from memory_lifecycle import ValidationState, retrievable
 
 @dataclass(frozen=True)
@@ -15,6 +16,7 @@ class Memory:
     importance: float = 0.5
     confidence: float = 0.5
     validation: ValidationState = ValidationState.UNREVIEWED
+    memory_id: str = field(default_factory=lambda: str(uuid4()))
 
 def retrieve(query: str, scope: Scope, memories: list[Memory]) -> list[dict]:
     terms = set(query.lower().split())

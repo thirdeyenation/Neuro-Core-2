@@ -1,0 +1,27 @@
+# Neuro Core 2 policy defaults.
+# These values declare intended behavior; they are not runtime-active until the
+# corresponding adapter and services are implemented and verified.
+
+observability:
+  enabled: true
+  event_detail: standard
+
+capture:
+  enabled: true
+  require_provenance: true
+
+retrieval:
+  enabled: true
+  require_explanation: true
+  max_results: 8
+
+episodes:
+  enabled: true
+
+contradictions:
+  enabled: true
+  automatic_resolution: false
+
+reflection:
+  enabled: false
+  require_review: true

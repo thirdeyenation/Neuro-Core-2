@@ -1,0 +1,8 @@
+name: neuro_core_2
+title: Neuro Core 2
+description: Explainable, evidence-first memory for Agent Zero agents.
+version: 0.1.0
+settings_sections:
+  - agent
+per_project_config: true
+per_agent_config: true

@@ -36,7 +36,7 @@ Neuro Core 2 is an evidence-first, scoped memory capability for Agent Zero v2.8+
 
 - Ranking is a correctness baseline, not semantic retrieval.
 - SQLite opens per invocation and has no migration or concurrency strategy.
-- Tool code hardcodes the database path rather than reading `default_config.yaml`.
+- Tool code still needs to load the plugin-local database path from `default_config.yaml` at runtime.
 - Activity events are now durably appended when the underlying store supports it, but cross-invocation audit querying is not yet exposed as a tool.
 - The installer copies files but does not validate imports, discovery, permissions, or manifest behavior.
 - There is no authorization policy, input-size control, observability, or evaluation harness.

@@ -16,9 +16,9 @@ Neuro Core 2 is an evidence-first, scoped memory capability for Agent Zero v2.8+
 - Verified Agent Zero host run on 2026-08-05 with plugin identity `neuro_core_2`, capture/retrieve/validate/supersede flow, cross-scope isolation, and writable SQLite store evidence. See `docs/validation/2026-08-05-agent-zero-host-validation.md`.
 - Verified post-restart persistence check on 2026-08-05: database survived restart, remained writable, and capture/retrieve worked after restart. See `docs/validation/2026-08-05-post-restart-persistence-check.md`.
 - Durable activity-event persistence now stored in SQLite alongside memories, with a tiny read path exposed through `NeuroCoreService.list_activity(...)`.
+- `NeuroCoreService.list_activity(...)` is now covered by a unit test for scope-filtered in-memory activity access.
 
-## What is not proven
-
+## What is not proven\n
 - Performance, concurrency, security, benchmark, or competition claims. Do not claim these as completed.
 - Durable cross-session audit querying surface beyond the service method.
 - Tool configuration sourced from `default_config.yaml` instead of hardcoded paths.

@@ -18,6 +18,16 @@ class NeuroCoreServiceTests(unittest.TestCase):
         self.assertEqual(service.retrieve("activity ledger", scope), [])
         self.assertEqual([event.kind for event in service.ledger.for_scope(scope)], ["captured", "retrieved", "validation_changed"])
 
+    def test_list_activity_returns_scope_filtered_events_from_ledger(self):
+        alpha, beta = Scope("alpha"), Scope("beta")
+        service = NeuroCoreService(InMemoryStore())
+        first = service.capture(Memory("alpha event", "fixture", alpha))
+        service.capture(Memory("beta event", "fixture", beta))
+        service.validate(first.memory_id, ValidationState.VALIDATED)
+
+        self.assertEqual([event.kind for event in service.list_activity(alpha)], ["captured", "validation_changed"])
+        self.assertEqual([event.kind for event in service.list_activity(beta)], ["captured"])
+
 
 if __name__ == "__main__":
     unittest.main()

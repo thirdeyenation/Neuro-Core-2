@@ -14,10 +14,10 @@ Neuro Core 2 is an evidence-first, scoped memory capability for Agent Zero v2.8+
 - Standard-library tests for scope isolation, lifecycle, storage, SQLite persistence, and service flow.
 - Agent Zero plugin shell, installer, and `NeuroCapture`, `NeuroRetrieve`, and `NeuroValidate` tools.
 - Verified Agent Zero host run on 2026-08-05 with plugin identity `neuro_core_2`, capture/retrieve/validate/supersede flow, cross-scope isolation, and writable SQLite store evidence. See `docs/validation/2026-08-05-agent-zero-host-validation.md`.
+- Verified post-restart persistence check on 2026-08-05: database survived restart, remained writable, and capture/retrieve worked after restart. See `docs/validation/2026-08-05-post-restart-persistence-check.md`.
 
 ## What is not proven
 
-- Persistence across a separate long-running restart beyond the recorded host validation sequence.
 - Performance, concurrency, security, benchmark, or competition claims. Do not claim these as completed.
 
 ## Non-negotiable decisions
@@ -41,7 +41,7 @@ Neuro Core 2 is an evidence-first, scoped memory capability for Agent Zero v2.8+
 ## Completion sequence
 
 1. Run `python scripts/verify.py`.
-2. In the target Agent Zero container, run `python plugins/neuro_core_2/install.py`, reload plugins, and record the exact Agent Zero version/commit.
+2. In the target Agent Zero container, run `python plugins/neuro_core/install.py`, reload plugins, and record the exact Agent Zero version/commit.
 3. Smoke-test capture, retrieve, and validate with one project/agent scope; confirm superseded records disappear from retrieval.
 4. Resolve all host-contract and deployment-path findings before feature expansion.
 5. Make tool configuration real and persist activity events.

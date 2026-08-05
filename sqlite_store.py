@@ -30,6 +30,13 @@ class SQLiteStore:
         )
         self.connection.commit()
 
+    def list_events(self, scope: Scope | None = None) -> tuple[tuple, ...]:
+        if scope is None:
+            rows = self.connection.execute("SELECT event_id, kind, project, agent, targets, outcome, source, occurred_at FROM activity_events ORDER BY occurred_at ASC").fetchall()
+        else:
+            rows = self.connection.execute("SELECT event_id, kind, project, agent, targets, outcome, source, occurred_at FROM activity_events WHERE project = ? AND agent IS ? ORDER BY occurred_at ASC", (scope.project, scope.agent)).fetchall()
+        return tuple(rows)
+
     @staticmethod
     def _memory(row: tuple) -> Memory:
         return Memory(row[1], row[2], Scope(row[3], row[4]), row[5], row[6], ValidationState(row[7]), row[0])

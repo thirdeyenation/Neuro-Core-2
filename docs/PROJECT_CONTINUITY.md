@@ -15,11 +15,12 @@ Neuro Core 2 is an evidence-first, scoped memory capability for Agent Zero v2.8+
 - Agent Zero plugin shell, installer, and `NeuroCapture`, `NeuroRetrieve`, and `NeuroValidate` tools.
 - Verified Agent Zero host run on 2026-08-05 with plugin identity `neuro_core_2`, capture/retrieve/validate/supersede flow, cross-scope isolation, and writable SQLite store evidence. See `docs/validation/2026-08-05-agent-zero-host-validation.md`.
 - Verified post-restart persistence check on 2026-08-05: database survived restart, remained writable, and capture/retrieve worked after restart. See `docs/validation/2026-08-05-post-restart-persistence-check.md`.
+- Durable activity-event persistence now stored in SQLite alongside memories, with a tiny read path exposed through `NeuroCoreService.list_activity(...)`.
 
 ## What is not proven
 
 - Performance, concurrency, security, benchmark, or competition claims. Do not claim these as completed.
-- Durable activity/audit history across independent tool invocations.
+- Durable cross-session audit querying surface beyond the service method.
 - Tool configuration sourced from `default_config.yaml` instead of hardcoded paths.
 
 ## Non-negotiable decisions
@@ -36,7 +37,7 @@ Neuro Core 2 is an evidence-first, scoped memory capability for Agent Zero v2.8+
 - Ranking is a correctness baseline, not semantic retrieval.
 - SQLite opens per invocation and has no migration or concurrency strategy.
 - Tool code hardcodes the database path rather than reading `default_config.yaml`.
-- Activity events are now durably appended when the underlying store supports it, but cross-invocation audit querying is not yet exposed.
+- Activity events are now durably appended when the underlying store supports it, but cross-invocation audit querying is not yet exposed as a tool.
 - The installer copies files but does not validate imports, discovery, permissions, or manifest behavior.
 - There is no authorization policy, input-size control, observability, or evaluation harness.
 

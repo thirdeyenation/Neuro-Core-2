@@ -30,6 +30,12 @@ class NeuroCoreService:
         self._event("validation_changed", updated, target.value)
         return updated
 
+    def list_activity(self, scope: Scope | None = None):
+        list_events = getattr(self.store, "list_events", None)
+        if callable(list_events):
+            return list_events(scope)
+        return self.ledger.for_scope(scope) if scope is not None else self.ledger.all()
+
     def _event(self, kind: str, memory: Memory, outcome: str) -> None:
         event = ActivityEvent(kind, memory.scope, (memory.memory_id,), outcome, {"source": memory.source})
         self.ledger.append(event)

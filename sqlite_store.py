@@ -8,6 +8,7 @@ class SQLiteStore:
     def __init__(self, path: str = "neuro_core.db") -> None:
         self.connection = sqlite3.connect(path)
         self.connection.execute("CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, text TEXT, source TEXT, project TEXT, agent TEXT, importance REAL, confidence REAL, validation TEXT)")
+        self.connection.execute("CREATE TABLE IF NOT EXISTS activity_events (event_id TEXT PRIMARY KEY, kind TEXT, project TEXT, agent TEXT, targets TEXT, outcome TEXT, source TEXT, occurred_at TEXT)")
 
     def put(self, memory: Memory) -> Memory:
         self.connection.execute("INSERT OR REPLACE INTO memories VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (memory.memory_id, memory.text, memory.source, memory.scope.project, memory.scope.agent, memory.importance, memory.confidence, memory.validation.value))
@@ -21,6 +22,13 @@ class SQLiteStore:
     def list(self, scope: Scope) -> tuple[Memory, ...]:
         rows = self.connection.execute("SELECT * FROM memories WHERE project = ? AND agent IS ?", (scope.project, scope.agent)).fetchall()
         return tuple(self._memory(row) for row in rows)
+
+    def append_event(self, event) -> None:
+        self.connection.execute(
+            "INSERT OR REPLACE INTO activity_events VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (event.event_id, event.kind, event.scope.project, event.scope.agent, ",".join(event.targets), event.outcome, event.evidence.get("source", ""), event.occurred_at.isoformat()),
+        )
+        self.connection.commit()
 
     @staticmethod
     def _memory(row: tuple) -> Memory:

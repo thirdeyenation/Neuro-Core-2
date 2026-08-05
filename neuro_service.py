@@ -31,4 +31,8 @@ class NeuroCoreService:
         return updated
 
     def _event(self, kind: str, memory: Memory, outcome: str) -> None:
-        self.ledger.append(ActivityEvent(kind, memory.scope, (memory.memory_id,), outcome, {"source": memory.source}))
+        event = ActivityEvent(kind, memory.scope, (memory.memory_id,), outcome, {"source": memory.source})
+        self.ledger.append(event)
+        append_event = getattr(self.store, "append_event", None)
+        if callable(append_event):
+            append_event(event)

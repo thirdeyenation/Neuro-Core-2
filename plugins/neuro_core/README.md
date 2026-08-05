@@ -4,7 +4,7 @@ This directory is an Agent Zero plugin shell. Agent Zero discovers local plugins
 
 ## Installation
 
-1. Copy this `neuro_core` directory to `/a0/usr/plugins/neuro_core/`.
+1. Copy this `neuro_core_2` directory to `/a0/usr/plugins/neuro_core_2/`.
 2. Copy the repository's domain modules (`neuro_core.py`, `memory_lifecycle.py`, `memory_store.py`, `sqlite_store.py`, `activity_ledger.py`, and `neuro_service.py`) into the plugin directory or package them with the plugin.
 3. Configure `database_path` in `default_config.yaml` for a plugin-owned persistent SQLite database.
 4. Add host tool registration only after verifying the target Agent Zero release's tool callback contract.

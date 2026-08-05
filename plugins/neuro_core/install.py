@@ -3,7 +3,7 @@ from pathlib import Path
 from shutil import copy2, copytree
 
 ROOT = Path(__file__).resolve().parents[2]
-DESTINATION = Path("/a0/usr/plugins/neuro_core")
+DESTINATION = Path("/a0/usr/plugins/neuro_core_2")
 MODULES = ("neuro_core.py", "memory_lifecycle.py", "memory_store.py", "sqlite_store.py", "activity_ledger.py", "neuro_service.py")
 
 

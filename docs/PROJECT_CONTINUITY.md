@@ -17,7 +17,7 @@ Neuro Core 2 is an evidence-first, scoped memory capability for Agent Zero v2.8+
 ## What is not proven
 
 - Plugin discovery or tool execution inside the target Agent Zero v2.8+ container.
-- Filesystem permissions for `/a0/usr/plugins/neuro_core/neuro_core.db`.
+- Filesystem permissions for `/a0/usr/plugins/neuro_core_2/neuro_core.db`.
 - Performance, concurrency, security, benchmark, or competition claims. Do not claim these as completed.
 
 ## Non-negotiable decisions
@@ -41,7 +41,7 @@ Neuro Core 2 is an evidence-first, scoped memory capability for Agent Zero v2.8+
 ## Completion sequence
 
 1. Run `python scripts/verify.py`.
-2. In the target Agent Zero container, run `python plugins/neuro_core/install.py`, reload plugins, and record the exact Agent Zero version/commit.
+2. In the target Agent Zero container, run `python plugins/neuro_core_2/install.py`, reload plugins, and record the exact Agent Zero version/commit.
 3. Smoke-test capture, retrieve, and validate with one project/agent scope; confirm superseded records disappear from retrieval.
 4. Resolve all host-contract and deployment-path findings before feature expansion.
 5. Make tool configuration real and persist activity events.

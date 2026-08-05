@@ -10,7 +10,7 @@ class NeuroCapture(Tool):
     async def execute(self, text="", source="agent_zero", project="default", agent="", importance=0.5, confidence=0.5, **kwargs):
         if not text or not project:
             raise ValueError("text and project are required")
-        store = SQLiteStore("/a0/usr/plugins/neuro_core/neuro_core.db")
+        store = SQLiteStore("/a0/usr/plugins/neuro_core_2/neuro_core.db")
         try:
             service = NeuroCoreService(store)
             memory = service.capture(Memory(text, source, Scope(project, agent or None), float(importance), float(confidence)))

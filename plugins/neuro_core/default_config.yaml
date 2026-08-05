@@ -1,2 +1,2 @@
-database_path: /a0/usr/plugins/neuro_core/neuro_core.db
-default_namespace: default
+database_path: /a0/usr/plugins/neuro_core_2/neuro_core.db
+default_namespace: neuro_core_2

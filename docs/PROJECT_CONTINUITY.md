@@ -13,11 +13,11 @@ Neuro Core 2 is an evidence-first, scoped memory capability for Agent Zero v2.8+
 - `NeuroCoreService` composing capture, retrieve, validation, storage, and activity events.
 - Standard-library tests for scope isolation, lifecycle, storage, SQLite persistence, and service flow.
 - Agent Zero plugin shell, installer, and `NeuroCapture`, `NeuroRetrieve`, and `NeuroValidate` tools.
+- Verified Agent Zero host run on 2026-08-05 with plugin identity `neuro_core_2`, capture/retrieve/validate/supersede flow, cross-scope isolation, and writable SQLite store evidence. See `docs/validation/2026-08-05-agent-zero-host-validation.md`.
 
 ## What is not proven
 
-- Plugin discovery or tool execution inside the target Agent Zero v2.8+ container.
-- Filesystem permissions for `/a0/usr/plugins/neuro_core_2/neuro_core.db`.
+- Persistence across a separate long-running restart beyond the recorded host validation sequence.
 - Performance, concurrency, security, benchmark, or competition claims. Do not claim these as completed.
 
 ## Non-negotiable decisions

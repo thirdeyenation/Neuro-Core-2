@@ -6,11 +6,14 @@ from neuro_service import NeuroCoreService
 from sqlite_store import SQLiteStore
 
 
+DB_PATH = "/a0/usr/plugins/neuro_core_2/neuro_core.db"
+
+
 class NeuroRetrieve(Tool):
     async def execute(self, query="", project="default", agent="", **kwargs):
         if not query or not project:
             raise ValueError("query and project are required")
-        store = SQLiteStore("/a0/usr/plugins/neuro_core_2/neuro_core.db")
+        store = SQLiteStore(DB_PATH)
         try:
             results = NeuroCoreService(store).retrieve(query, Scope(project, agent or None))
             return [{"memory_id": item["memory"].memory_id, "text": item["memory"].text, "source": item["memory"].source, "score": item["score"], "factors": item["factors"]} for item in results]

@@ -35,4 +35,4 @@ In controlled multi-step tasks, Neuro Core 2 must outperform a no-memory baselin
 
 ## Status
 
-Foundation phase. No Agent Zero runtime behavior is claimed or implemented by this commit.
+Foundation phase. The core domain/service baseline is implemented and locally tested; the Agent Zero plugin identity is `neuro_core_2`; live host validation and post-restart persistence have been verified and recorded in GitHub. Remaining unproven areas include concurrency, security, observability, and benchmark claims.

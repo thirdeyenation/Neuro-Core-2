@@ -19,6 +19,8 @@ Neuro Core 2 is an evidence-first, scoped memory capability for Agent Zero v2.8+
 ## What is not proven
 
 - Performance, concurrency, security, benchmark, or competition claims. Do not claim these as completed.
+- Durable activity/audit history across independent tool invocations.
+- Tool configuration sourced from `default_config.yaml` instead of hardcoded paths.
 
 ## Non-negotiable decisions
 

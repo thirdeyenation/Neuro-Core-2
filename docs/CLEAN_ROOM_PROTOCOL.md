@@ -19,3 +19,10 @@ Applies to all Neuro Core 2 code, tests, and documentation in this repo.
 
 - Plugin folder: `plugins/neuro_core_2/`.
 - Manifest name: `neuro_core_2`.
+- Tools: `NeuroCore2Capture`, `NeuroCore2Retrieve`, `NeuroCore2Validate`.
+
+## Relation to other docs
+
+- See `docs/PROJECT_CONTINUITY.md` for change discipline and onboarding.
+- See `docs/COMPETITION_CHARTER.md` for entry claims and evidence rules.
+- See `docs/decisions/` for recorded architectural and policy decisions.

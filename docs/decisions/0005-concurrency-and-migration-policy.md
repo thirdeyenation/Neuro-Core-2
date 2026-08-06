@@ -1,23 +1,28 @@
-# ADR-0005: Concurrency and Migration Policy
-
-- **Status:** Accepted
-- **Date:** 2026-08-05
+# 0005: Concurrency and Migration Policy
 
 ## Context
 
-Neuro Core 2 now persists memories and activity events in SQLite. The codebase needs a minimal policy for how concurrent access and schema changes are handled so that verified behavior remains stable without promising unsupported guarantees.
+Neuro Core 2 uses SQLite for durability. The project must clarify concurrency assumptions and migration expectations.
 
 ## Decision
 
-1. Treat SQLite as the durable source of truth for a single active writer process at a time.
-2. Open and close database connections per tool/service invocation, as the current architecture already does.
-3. Keep writes synchronous and commit immediately after each memory/event mutation.
-4. Do not claim concurrent multi-writer safety, WAL tuning, or cross-process locking until those behaviors are explicitly implemented and tested.
-5. Treat schema changes as forward-only: when a table shape changes materially, add a versioned migration note and a regression test before release claims are updated.
-6. Prefer additive schema changes and preserve prior evidence rather than destructive rewrites.
+- Treat SQLite as a single-writer, file-based store for v1.
+- Do not claim concurrency guarantees beyond what the current implementation provides.
+- For schema changes:
+  - Prefer additive columns/tables.
+  - Provide migration notes or scripts when behavior changes.
+  - Preserve backward compatibility where feasible or document breaking changes explicitly.
 
 ## Consequences
 
-- The current verified runtime remains simple and deterministic.
-- Restart persistence and small-surface durability are preserved.
-- The project can evolve toward migrations and stronger concurrency only when a concrete need and test coverage exist.
+- No concurrency claims in competition materials.
+- Schema compatibility is protected by tests (e.g. restart + additive writes).
+- Future work may introduce a more formal migration mechanism or concurrency model.
+
+## References
+
+- `docs/ARCHITECTURE.md`
+- `docs/PROJECT_CONTINUITY.md`
+- `docs/COMPETITION_CHARTER.md`
+- `docs/decisions/0004-audit-durability-and-migration-policy.md`
+- `docs/decisions/0006-implementation-rules-for-sqlite-durability.md`

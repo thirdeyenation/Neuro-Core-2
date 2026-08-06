@@ -1,20 +1,30 @@
-# ADR-0001: Explainable Memory Loop and Clean-Room Architecture
-
-- **Status:** Accepted
-- **Date:** 2026-08-03
+# 0001: Product and Architecture
 
 ## Context
 
-The competition entry must be developed independently from an existing memory-plugin repository while producing demonstrably stronger user outcomes. A storage-first or dashboard-first design risks reproducing opaque automation rather than solving it.
+Neuro Core 2 is scoped, auditable memory for Agent Zero v2.8+. The project needed a clean separation between domain logic and host integration, with explicit lifecycle and audit.
 
 ## Decision
 
-Neuro Core 2 will be designed around an explainable memory loop: capture, understand, retrieve, explain, resolve, and learn. It will use a canonical memory record, append-only activity events, transparent retrieval explanations, episode-first workflows, and a reviewable contradiction process. Agent Zero integration is isolated behind a verified adapter.
+- Implement a framework-independent domain:
+  - `Memory` and `Scope` as core types.
+  - Lexical/trust ranking with factor-level explanations.
+- Define an explicit lifecycle policy:
+  - States: `unreviewed`, `validated`, `disputed`, `superseded`.
+  - Superseded memories are excluded from retrieval but preserved for audit.
+- Introduce a `MemoryStore` port with in-memory and SQLite adapters.
+- Compose capabilities in `NeuroCoreService` (capture, retrieve, validate, store, activity).
+- Keep all Agent Zero integration under `plugins/neuro_core_2/`.
 
 ## Consequences
 
-- The repository starts with product, architecture, and benchmark contracts before runtime implementation.
-- Features that cannot produce inspectable evidence are deferred.
-- The graph is a supporting navigation view, not the product's sole explanation surface.
-- The implementation can change storage or framework adapters without abandoning its user-facing evidence contract.
-- Competitive claims require benchmark evidence rather than subjective feature comparison.
+- Core modules (`neuro_core.py`, `memory_lifecycle.py`, `memory_store.py`, `sqlite_store.py`, `activity_ledger.py`, `neuro_service.py`) remain host-independent.
+- Plugin identity is `neuro_core_2` with tools `NeuroCore2Capture`, `NeuroCore2Retrieve`, `NeuroCore2Validate`.
+- Documentation distinguishes implemented, planned, and unverified behavior (see `docs/PROJECT_CONTINUITY.md`).
+
+## References
+
+- `docs/ARCHITECTURE.md`
+- `docs/PRODUCT_SPEC.md`
+- `docs/PROJECT_CONTINUITY.md`
+- `docs/COMPETITION_CHARTER.md`

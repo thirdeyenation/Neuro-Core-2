@@ -1,22 +1,25 @@
-# ADR-0004: Audit Durability and Migration Policy
-
-- **Status:** Accepted
-- **Date:** 2026-08-05
+# 0004: Audit Durability and Migration Policy
 
 ## Context
 
-Neuro Core 2 now persists activity events durably in the same SQLite database used by the memory store. The project needs a minimal, explicit policy for what durability is promised now and what remains deferred.
+Neuro Core 2 appends activity events for meaningful operations (capture, retrieve, validation changes). These must be durable and aligned with memory storage.
 
 ## Decision
 
-1. Persist activity events in SQLite when the underlying store supports `append_event(...)`.
-2. Keep the in-memory `ActivityLedger` behavior unchanged for compatibility and testability.
-3. Expose a tiny service-level read path (`NeuroCoreService.list_activity(...)`) rather than introducing a new tool or UI surface immediately.
-4. Defer broader audit-query UX, concurrency controls, and migration tooling until a concrete consumer requires them.
-5. Treat schema changes as forward-only; if the SQLite schema changes materially, add a migration note and a versioned test before claiming compatibility.
+- Store activity events durably in SQLite alongside memories.
+- Expose a minimal read path via `NeuroCoreService.list_activity(scope)`.
+- Do not delete audit records; treat them as append-only.
+- For schema evolution, prefer additive changes and migration scripts over breaking changes.
 
 ## Consequences
 
-- Durable event history now survives restart alongside the memory store.
-- The audit trail is easier to preserve, but not yet a first-class user feature.
-- Future schema changes must be documented and tested before release claims are made.
+- Audit is now a first-class, durable concern.
+- Cross-invocation audit querying is possible in principle, though not yet exposed as a tool.
+- Schema changes must consider migration of both memories and events.
+
+## References
+
+- `docs/ARCHITECTURE.md`
+- `docs/PROJECT_CONTINUITY.md`
+- `docs/decisions/0005-concurrency-and-migration-policy.md`
+- `docs/decisions/0006-implementation-rules-for-sqlite-durability.md`

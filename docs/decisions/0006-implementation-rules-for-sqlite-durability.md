@@ -1,23 +1,31 @@
-# ADR-0006: Implementation Rules for SQLite Durability
-
-- **Status:** Accepted
-- **Date:** 2026-08-05
+# 0006: Implementation Rules for SQLite Durability
 
 ## Context
 
-Neuro Core 2 now relies on SQLite for durable memory and activity-event storage. The runtime is intentionally small and verified, so the implementation rules should preserve the current behavior without promising unsupported concurrency or migration features.
+Neuro Core 2 relies on SQLite for persistent storage of memories and activity events. The implementation must ensure durability and restart survival.
 
 ## Decision
 
-1. Treat SQLite as a single-writer durability layer for the currently verified runtime slice.
-2. Keep writes synchronous and immediately committed.
-3. Prefer additive schema changes over destructive rewrites.
-4. Require a versioned migration note and regression test before any table shape changes are considered release-ready.
-5. Do not introduce WAL tuning, cross-process locking, or multi-writer guarantees unless they are explicitly implemented, tested, and documented.
-6. Keep activity-event persistence and memory persistence aligned in the same SQLite database until a concrete need justifies splitting them.
+- Use a single SQLite database per plugin instance: `plugins/neuro_core_2/neuro_core_2.db`.
+- Ensure the database:
+  - Survives process restarts.
+  - Remains writable after restart.
+  - Preserves all memories and events without data loss.
+- Protect schema compatibility with regression tests that:
+  - Reopen the database after writes.
+  - Append new memories and events post-restart.
+  - Verify that all prior data remains intact.
 
 ## Consequences
 
-- The current runtime remains simple, deterministic, and evidence-backed.
-- Future schema evolution must be test-first.
-- Concurrency claims remain intentionally narrow until expanded by measured implementation work.
+- SQLite is treated as a durable, restart-surviving store.
+- Schema changes are constrained by the need to preserve existing data.
+- Tests in `test_sqlite_store.py` guard against accidental schema drift.
+
+## References
+
+- `docs/ARCHITECTURE.md`
+- `docs/PROJECT_CONTINUITY.md`
+- `docs/validation/2026-08-05-post-restart-persistence-check.md`
+- `docs/decisions/0004-audit-durability-and-migration-policy.md`
+- `docs/decisions/0005-concurrency-and-migration-policy.md`

@@ -10,7 +10,7 @@ Neuro Core 2 is a scoped, auditable memory capability for Agent Zero v2.8+. It p
 - **SQLite adapter** (`sqlite_store.py`): durable `MemoryStore` implementation.
 - **Activity ledger** (`activity_ledger.py`): append-only event log.
 - **Service** (`neuro_service.py`): composes capture, retrieve, validate, store, and activity.
-- **Plugin** (`plugins/neuro_core_2/`): Agent Zero tools (`neuro_core_2_capture`, `neuro_core_2_retrieve`, `neuro_core_2_validate`).
+- **Plugin** (`plugins/neuro_core_2/`): Agent Zero tools `NeuroCore2Capture`, `NeuroCore2Retrieve`, `NeuroCore2Validate`.
 
 ## Data flow
 

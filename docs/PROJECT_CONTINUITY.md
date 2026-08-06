@@ -13,7 +13,7 @@ Neuro Core 2 is an evidence-first, scoped memory capability for Agent Zero v2.8+
 - `NeuroCoreService` composing capture, retrieve, validation, storage, and activity events.
 - Standard-library tests for scope isolation, lifecycle, storage, SQLite persistence, and service flow.
 - Agent Zero plugin shell, installer, and `NeuroCore2Capture`, `NeuroCore2Retrieve`, and `NeuroCore2Validate` tools.
-- Verified Agent Zero host run on 2026-08-05 with plugin identity `neuro_core_2`, capture/retrieve/validate/supersede flow, cross-scope isolation, and writable SQLite store evidence. See `docs/AGENT_ZERO_CONTRACT_BASELINE.md`.
+- Verified Agent Zero host run on 2026-08-05 with plugin identity `neuro_core_2`, capture/retrieve/validate/supersede flow, cross-scope isolation, and writable SQLite store evidence. See `docs/validation/2026-08-05-agent-zero-host-validation.md`.
 - Verified post-restart persistence check on 2026-08-05: database survived restart, remained writable, and capture/retrieve worked after restart. See `docs/validation/2026-08-05-post-restart-persistence-check.md`.
 - Durable activity-event persistence now stored in SQLite alongside memories, with a tiny read path exposed through `NeuroCoreService.list_activity(...)`.
 - `NeuroCoreService.list_activity(...)` is now covered by a unit test for scope-filtered in-memory activity access.
@@ -38,7 +38,7 @@ Neuro Core 2 is an evidence-first, scoped memory capability for Agent Zero v2.8+
 
 - Ranking is a correctness baseline, not semantic retrieval.
 - SQLite opens per invocation and has no migration or concurrency strategy.
-- Tool code still needs to load the plugin-local database path from `default_config.yaml` at runtime.
+- Tool code should load the plugin-local database path from `default_config.yaml` at runtime.
 - Activity events are now durably appended when the underlying store supports it, but cross-invocation audit querying is not yet exposed as a tool.
 - The installer copies files but does not validate imports, discovery, permissions, or manifest behavior.
 - There is no authorization policy, input-size control, observability, or evaluation harness.
@@ -55,6 +55,19 @@ Neuro Core 2 is an evidence-first, scoped memory capability for Agent Zero v2.8+
 ## Change discipline
 
 Every behavior change needs a `unittest` update. Record lifecycle, ranking, or public-contract decisions in `docs/decisions/`. Preserve constructor and port compatibility or provide a deliberate migration. Keep implemented, planned, and unverified behavior clearly separated.
+
+## Onboarding for new contributors
+
+Before touching code:
+1. Read this file, `docs/ARCHITECTURE.md`, and `docs/AGENT_ZERO_CONTRACT_BASELINE.md`.
+2. Run the tests locally and ensure they pass.
+3. Reproduce the host validation steps in `docs/validation/` using the recorded Agent Zero version/commit.
+
+When proposing changes:
+- State the objective and why it matters.
+- Identify affected modules, tests, and ADRs.
+- Call out any assumptions, risks, and downstream effects.
+- Preserve backward compatibility or provide a migration note.
 
 ## Acceptance evidence
 

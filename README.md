@@ -1,33 +1,41 @@
 # Neuro Core 2
 
-Evidence-first, scoped memory for Agent Zero v2.8+. This repository implements the Neuro Core 2 plugin: capture, retrieval, and validation tools backed by SQLite, with explicit lifecycle and audit.
+Evidence-first, scoped memory for Agent Zero v2.8+. This repository implements the Neuro Core 2 plugin: capture, retrieval, and validation tools backed by SQLite, with explicit memory lifecycle and audit.
 
 ## Quick start
 
-1. Run `python scripts/verify.py`.
-2. In the target Agent Zero container, run `python plugins/neuro_core_2/install.py`, reload plugins, and record the exact Agent Zero version/commit.
-3. Smoke-test capture, retrieve, and validate with one project/agent scope; confirm superseded records disappear from retrieval.
+1. Run `python scripts/verify.py` (if present) to sanity-check the core modules.
+2. In the target Agent Zero container, run:
+   ```bash
+   python plugins/neuro_core_2/install.py
+   ```
+   then reload plugins and record the exact Agent Zero version/commit.
+3. Smoke-test with one project/agent scope:
+   - Capture a memory via `NeuroCore2Capture`.
+   - Retrieve it via `NeuroCore2Retrieve`.
+   - Validate or supersede it via `NeuroCore2Validate`.
+   - Confirm superseded memories no longer appear in retrieval.
 
 ## What's implemented
 
 - Framework-independent domain: immutable `Memory`, `Scope`, lexical/trust ranking, and factor-level retrieval explanations.
-- Lifecycle policy: `unreviewed`, `validated`, `disputed`, and terminal `superseded`; superseded memories are excluded, not deleted.
+- Lifecycle policy: `unreviewed`, `validated`, `disputed`, and terminal `superseded`; superseded memories are excluded from retrieval, not deleted.
 - Append-only in-process activity ledger.
 - `MemoryStore` port with in-memory and SQLite adapters.
 - `NeuroCoreService` composing capture, retrieve, validation, storage, and activity events.
 - Standard-library tests for scope isolation, lifecycle, storage, SQLite persistence, and service flow.
-- Agent Zero plugin shell, installer, and `NeuroCore2Capture`, `NeuroCore2Retrieve`, and `NeuroCore2Validate` tools.
-- Verified Agent Zero host run on 2026-08-05 with plugin identity `neuro_core_2`, capture/retrieve/validate/supersede flow, cross-scope isolation, and writable SQLite store evidence. See `docs/AGENT_ZERO_CONTRACT_BASELINE.md`.
+- Agent Zero plugin (`neuro_core_2`) with `NeuroCore2Capture`, `NeuroCore2Retrieve`, and `NeuroCore2Validate` tools.
+- Verified Agent Zero host run on 2026-08-05 with plugin identity `neuro_core_2`, capture/retrieve/validate/supersede flow, cross-scope isolation, and writable SQLite store evidence. See `docs/validation/2026-08-05-agent-zero-host-validation.md`.
 - Verified post-restart persistence check on 2026-08-05: database survived restart, remained writable, and capture/retrieve worked after restart. See `docs/validation/2026-08-05-post-restart-persistence-check.md`.
-- Durable activity-event persistence now stored in SQLite alongside memories, with a tiny read path exposed through `NeuroCoreService.list_activity(...)`.
-- `NeuroCoreService.list_activity(...)` is now covered by a unit test for scope-filtered in-memory activity access.
-- SQLite schema compatibility is now protected by a regression test that exercises restart plus additive activity writes.
+- Durable activity-event persistence in SQLite alongside memories, with a tiny read path via `NeuroCoreService.list_activity(...)`.
+- `NeuroCoreService.list_activity(...)` covered by a unit test for scope-filtered in-memory activity access.
+- SQLite schema compatibility protected by a regression test that exercises restart plus additive activity writes.
 
 ## What is not proven
 
-- Performance, concurrency, security, benchmark, or competition claims. Do not claim these as completed.
+- Performance, concurrency, security, benchmark, or competition claims. Do not assert these as completed.
 - Durable cross-session audit querying surface beyond the service method.
-- Tool configuration sourced from `default_config.yaml` instead of hardcoded paths.
+- Tool configuration sourced from `default_config.yaml` instead of hardcoded paths (design intent; implementation may still be evolving).
 
 ## Non-negotiable decisions
 
@@ -42,8 +50,8 @@ Evidence-first, scoped memory for Agent Zero v2.8+. This repository implements t
 
 - Ranking is a correctness baseline, not semantic retrieval.
 - SQLite opens per invocation and has no migration or concurrency strategy.
-- Tool code still needs to load the plugin-local database path from `default_config.yaml` at runtime.
-- Activity events are now durably appended when the underlying store supports it, but cross-invocation audit querying is not yet exposed as a tool.
+- Tool code should load the plugin-local database path from `default_config.yaml` at runtime.
+- Activity events are durably appended when the underlying store supports it, but cross-invocation audit querying is not yet exposed as a tool.
 - The installer copies files but does not validate imports, discovery, permissions, or manifest behavior.
 - There is no authorization policy, input-size control, observability, or evaluation harness.
 

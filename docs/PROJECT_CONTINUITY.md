@@ -50,7 +50,7 @@ Neuro Core 2 is an evidence-first, scoped memory capability for Agent Zero v2.8+
 3. Smoke-test capture, retrieve, and validate with one project/agent scope; confirm superseded records disappear from retrieval.
 4. Resolve all host-contract and deployment-path findings before feature expansion.
 5. Make tool configuration real and persist activity events.
-6. Add schema migrations, concurrency/failure policy, and benchmark harness before production or competition claims.
+6. Add schema migrations, concurrency/failure policy, and a benchmark harness before production or competition claims.
 
 ## Change discipline
 

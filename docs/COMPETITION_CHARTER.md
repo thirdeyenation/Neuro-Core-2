@@ -1,35 +1,30 @@
-# Competition Charter
+# Neuro Core 2 Competition Charter
 
-## Mission
+## Entry
 
-Build the most trustworthy memory capability for Agent Zero: a plugin that improves continuity across work while keeping memory behavior visible, attributable, controllable, and reversible.
+Neuro Core 2: scoped, auditable memory for Agent Zero v2.8+.
 
-## The competitor stance
+## Claims
 
-A feature-rich memory plugin is not enough. The winning entry must prove that its memory changes real task performance while allowing a human to understand and intervene in that process. We optimize for trustworthy assistance, not storage volume, graph complexity, or dashboard breadth.
+- Explainable retrieval: selected memories expose scoring factors.
+- Explicit lifecycle: `unreviewed`, `validated`, `disputed`, `superseded`.
+- Durable storage: SQLite with restart survival and additive writes.
+- Audit: append-only activity events stored durably.
 
-## Target users
+## Evidence
 
-- Operators who need agents to retain project context without silently steering work.
-- Builders who need prior decisions, tasks, and episodes to be discoverable and attributable.
-- Reviewers who need to inspect retrieval evidence, uncertainty, and changes to memory state.
+- Verified host run on 2026-08-05 with plugin identity `neuro_core_2`.
+- Post-restart persistence check on 2026-08-05.
+- Schema compatibility regression test.
+- ADRs documenting product/architecture, plugin identity, host validation, audit durability, concurrency/migration, and SQLite implementation rules.
 
-## Product principles
+## Out of scope
 
-1. **Evidence before assertion.** Never imply that a memory influenced a decision unless the evidence supports that claim.
-2. **Explain by default.** Every material capture, retrieval, conflict, reflection, and resolution has an inspectable record.
-3. **Human control without data loss.** Corrections preserve provenance and history; they do not silently rewrite the past.
-4. **Episodes over fragments.** The product must preserve meaningful task narratives, not merely isolated embeddings.
-5. **Progressive disclosure.** Normal users see concise signals; advanced users can inspect the full trace.
-6. **Safe interoperability.** Public integration contracts are explicit, scoped, versioned, and independently tested.
+- Performance, concurrency, security, or benchmark claims.
+- Semantic/vector retrieval (future work).
 
-## Non-goals for the first release
+## Identity
 
-- Replacing Agent Zero's framework-owned memory implementation.
-- Framework-wide shared primitives before the local plugin loop is proven.
-- Opaque always-on LLM classification or contradiction calls.
-- A dashboard that reports activity without demonstrating task value.
-
-## Winning criteria
-
-The entry is ready to compete only when the benchmark plan is passed, the runtime path is testable in an isolated namespace, the user-facing explanation path is accessible, and all external claims can be traced to reproducible evidence.
+- Plugin folder: `plugins/neuro_core_2/`.
+- Manifest name: `neuro_core_2`.
+- Tools: `neuro_core_2_capture`, `neuro_core_2_retrieve`, `neuro_core_2_validate`.

@@ -12,8 +12,8 @@ Neuro Core 2 is an evidence-first, scoped memory capability for Agent Zero v2.8+
 - `MemoryStore` port with in-memory and SQLite adapters.
 - `NeuroCoreService` composing capture, retrieve, validation, storage, and activity events.
 - Standard-library tests for scope isolation, lifecycle, storage, SQLite persistence, and service flow.
-- Agent Zero plugin shell, installer, and `NeuroCapture`, `NeuroRetrieve`, and `NeuroValidate` tools.
-- Verified Agent Zero host run on 2026-08-05 with plugin identity `neuro_core_2`, capture/retrieve/validate/supersede flow, cross-scope isolation, and writable SQLite store evidence. See `docs/validation/2026-08-05-agent-zero-host-validation.md`.
+- Agent Zero plugin shell, installer, and `NeuroCore2Capture`, `NeuroCore2Retrieve`, and `NeuroCore2Validate` tools.
+- Verified Agent Zero host run on 2026-08-05 with plugin identity `neuro_core_2`, capture/retrieve/validate/supersede flow, cross-scope isolation, and writable SQLite store evidence. See `docs/AGENT_ZERO_CONTRACT_BASELINE.md`.
 - Verified post-restart persistence check on 2026-08-05: database survived restart, remained writable, and capture/retrieve worked after restart. See `docs/validation/2026-08-05-post-restart-persistence-check.md`.
 - Durable activity-event persistence now stored in SQLite alongside memories, with a tiny read path exposed through `NeuroCoreService.list_activity(...)`.
 - `NeuroCoreService.list_activity(...)` is now covered by a unit test for scope-filtered in-memory activity access.
@@ -27,7 +27,7 @@ Neuro Core 2 is an evidence-first, scoped memory capability for Agent Zero v2.8+
 
 ## Non-negotiable decisions
 
-1. Keep Agent Zero imports in `plugins/neuro_core/`; root modules must remain host-independent.
+1. Keep Agent Zero imports in `plugins/neuro_core_2/`; root modules must remain host-independent.
 2. Treat `Scope(project, agent)` as a hard isolation boundary.
 3. Preserve inspectable ranking factors when replacing lexical retrieval with semantic/vector retrieval.
 4. Preserve superseded records for audit; do not retrieve them.
@@ -46,11 +46,11 @@ Neuro Core 2 is an evidence-first, scoped memory capability for Agent Zero v2.8+
 ## Completion sequence
 
 1. Run `python scripts/verify.py`.
-2. In the target Agent Zero container, run `python plugins/neuro_core/install.py`, reload plugins, and record the exact Agent Zero version/commit.
+2. In the target Agent Zero container, run `python plugins/neuro_core_2/install.py`, reload plugins, and record the exact Agent Zero version/commit.
 3. Smoke-test capture, retrieve, and validate with one project/agent scope; confirm superseded records disappear from retrieval.
 4. Resolve all host-contract and deployment-path findings before feature expansion.
 5. Make tool configuration real and persist activity events.
-6. Add schema migrations, concurrency/failure policy, and a benchmark harness before production or competition claims.
+6. Add schema migrations, concurrency/failure policy, and benchmark harness before production or competition claims.
 
 ## Change discipline
 

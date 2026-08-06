@@ -1,38 +1,28 @@
 # Agent Zero Contract Baseline
 
-**Status:** Independently verified from public Agent Zero documentation and public framework/plugin-index sources on 2026-08-03.
+This document records the minimal contract Neuro Core 2 requires from the Agent Zero host to operate correctly.
 
-This document records only the contract required to begin an isolated plugin implementation. It is not a substitute for source-level and runtime verification before implementing framework-facing behavior.
+## Plugin identity
 
-## Verified plugin packaging facts
+- Plugin name in manifest: `neuro_core_2`.
+- Plugin folder: `plugins/neuro_core_2/`.
+- Tools: `neuro_core_2_capture`, `neuro_core_2_retrieve`, `neuro_core_2_validate`.
 
-- User-owned plugins are installed under `/a0/usr/plugins/<plugin_name>/`; framework-root plugin directories must not be modified for a user plugin.
-- A minimal plugin has `plugin.yaml` at repository/plugin root, a README, and may include `extensions/webui/` and `webui/`.
-- Agent Zero plugins may provide Web UI surfaces, tools, settings, scripts, hooks, model providers, and integrations.
-- Web UI extension changes require a browser refresh so Agent Zero rebuilds its extension list.
-- The public plugin manifest examples establish `name`, `title`, `description`, and `version` as core fields. Built-in examples also use `settings_sections`, `per_project_config`, and `per_agent_config`.
+## File layout
 
-## Verified publication constraints
+- `plugins/neuro_core_2/plugin.yaml` — plugin manifest.
+- `plugins/neuro_core_2/default_config.yaml` — plugin-local defaults.
+- `plugins/neuro_core_2/install.py` — installer script.
+- `plugins/neuro_core_2/tools/` — tool implementations.
+- `plugins/neuro_core_2/neuro_core_2.db` — SQLite database (created at runtime).
 
-If submitted to the public Plugin Index, the index folder name and this repository's `plugin.yaml.name` must match exactly and use lowercase letters, digits, and underscores. The intended public identity is therefore `neuro_core_2`.
+## Runtime expectations
 
-An Index submission requires a repository-root `plugin.yaml`; the Index metadata separately identifies the GitHub repository. Publication is explicitly out of scope until functionality, evidence, packaging, and review gates are complete.
+- Plugin discovery loads `plugins/neuro_core_2/plugin.yaml`.
+- Tools are invoked with explicit `project` and optional `agent` scope arguments.
+- Plugin-local config is read from `plugins/neuro_core_2/default_config.yaml`.
 
-## Architectural consequences
+## Versioning
 
-1. Neuro Core 2 will install as an independent user plugin, never as a modification of framework-owned files.
-2. The plugin begins with a root manifest and project/agent-scoped policy declaration.
-3. The first runtime slice should be small, observable, and removable: one visible Workbench surface and no hidden lifecycle mutation.
-4. Tools, APIs, lifecycle extensions, and storage adapters remain deferred until the precise source/runtime contract for each is checked.
-5. A plugin adapter must translate framework inputs and outputs at the edge; the core memory domain cannot depend on framework-owned classes.
-
-## Still unverified
-
-- Exact current Web UI component/registration contract.
-- Current API handler and authentication contract.
-- Tool response and prompt-discovery contract.
-- The lifecycle extension point appropriate for automatic capture or retrieval injection.
-- Runtime behavior of project and agent configuration precedence.
-- Supported test command and container-level smoke procedure.
-
-Each item needs a targeted source or runtime check before implementation.
+- Neuro Core 2 targets Agent Zero v2.8+.
+- The plugin identity `neuro_core_2` is fixed; do not rename to `neuro_core`.

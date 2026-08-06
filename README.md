@@ -1,38 +1,65 @@
 # Neuro Core 2
 
-**Explainable memory for Agent Zero.**
+Evidence-first, scoped memory for Agent Zero v2.8+. This repository implements the Neuro Core 2 plugin: capture, retrieval, and validation tools backed by SQLite, with explicit lifecycle and audit.
 
-Neuro Core 2 is an independent competition entry for an Agent Zero memory plugin. It is designed as a clean-room successor concept: it does not copy the existing Neuro Core implementation, and it will earn adoption through measurable improvement in reliability, explainability, control, and task outcomes.
+## Quick start
 
-## Product promise
+1. Run `python scripts/verify.py`.
+2. In the target Agent Zero container, run `python plugins/neuro_core_2/install.py`, reload plugins, and record the exact Agent Zero version/commit.
+3. Smoke-test capture, retrieve, and validate with one project/agent scope; confirm superseded records disappear from retrieval.
 
-Neuro Core 2 makes agent memory useful without making it opaque. A user can see what was captured, why context was retrieved, how trustworthy it is, what conflict exists, and what action changed memory state.
+## What's implemented
 
-## The memory loop
+- Framework-independent domain: immutable `Memory`, `Scope`, lexical/trust ranking, and factor-level retrieval explanations.
+- Lifecycle policy: `unreviewed`, `validated`, `disputed`, and terminal `superseded`; superseded memories are excluded, not deleted.
+- Append-only in-process activity ledger.
+- `MemoryStore` port with in-memory and SQLite adapters.
+- `NeuroCoreService` composing capture, retrieve, validation, storage, and activity events.
+- Standard-library tests for scope isolation, lifecycle, storage, SQLite persistence, and service flow.
+- Agent Zero plugin shell, installer, and `NeuroCore2Capture`, `NeuroCore2Retrieve`, and `NeuroCore2Validate` tools.
+- Verified Agent Zero host run on 2026-08-05 with plugin identity `neuro_core_2`, capture/retrieve/validate/supersede flow, cross-scope isolation, and writable SQLite store evidence. See `docs/AGENT_ZERO_CONTRACT_BASELINE.md`.
+- Verified post-restart persistence check on 2026-08-05: database survived restart, remained writable, and capture/retrieve worked after restart. See `docs/validation/2026-08-05-post-restart-persistence-check.md`.
+- Durable activity-event persistence now stored in SQLite alongside memories, with a tiny read path exposed through `NeuroCoreService.list_activity(...)`.
+- `NeuroCoreService.list_activity(...)` is now covered by a unit test for scope-filtered in-memory activity access.
+- SQLite schema compatibility is now protected by a regression test that exercises restart plus additive activity writes.
 
-`Capture → Understand → Retrieve → Explain → Resolve → Learn`
+## What is not proven
 
-The product is successful only when each meaningful stage leaves scoped, inspectable evidence.
+- Performance, concurrency, security, benchmark, or competition claims. Do not claim these as completed.
+- Durable cross-session audit querying surface beyond the service method.
+- Tool configuration sourced from `default_config.yaml` instead of hardcoded paths.
 
-## Competition win condition
+## Non-negotiable decisions
 
-In controlled multi-step tasks, Neuro Core 2 must outperform a no-memory baseline and a basic retrieval baseline on correct context recall, redundant work avoided, unsupported-memory claims avoided, and user ability to inspect or correct behavior. See [the benchmark plan](docs/BENCHMARK_PLAN.md).
+1. Keep Agent Zero imports in `plugins/neuro_core_2/`; root modules must remain host-independent.
+2. Treat `Scope(project, agent)` as a hard isolation boundary.
+3. Preserve inspectable ranking factors when replacing lexical retrieval with semantic/vector retrieval.
+4. Preserve superseded records for audit; do not retrieve them.
+5. Add storage backends behind `MemoryStore`, not directly in the service.
+6. Keep explicit tool scope inputs unless a documented host-session mapping is proven.
 
-## Repository boundaries
+## Known debt
 
-- This repository is an independent implementation and product design.
-- The existing Neuro Core repository is a read-only competitor/reference for comparative analysis; its source is not copied here.
-- Framework integration is implemented only after the relevant Agent Zero contract is independently verified.
+- Ranking is a correctness baseline, not semantic retrieval.
+- SQLite opens per invocation and has no migration or concurrency strategy.
+- Tool code still needs to load the plugin-local database path from `default_config.yaml` at runtime.
+- Activity events are now durably appended when the underlying store supports it, but cross-invocation audit querying is not yet exposed as a tool.
+- The installer copies files but does not validate imports, discovery, permissions, or manifest behavior.
+- There is no authorization policy, input-size control, observability, or evaluation harness.
 
-## Initial documents
+## Completion sequence
 
-- [Competition charter](docs/COMPETITION_CHARTER.md)
-- [Clean-room protocol](docs/CLEAN_ROOM_PROTOCOL.md)
-- [Product specification](docs/PRODUCT_SPEC.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Benchmark plan](docs/BENCHMARK_PLAN.md)
-- [ADR-0001](docs/decisions/0001-product-and-architecture.md)
+1. Run `python scripts/verify.py`.
+2. In the target Agent Zero container, run `python plugins/neuro_core_2/install.py`, reload plugins, and record the exact Agent Zero version/commit.
+3. Smoke-test capture, retrieve, and validate with one project/agent scope; confirm superseded records disappear from retrieval.
+4. Resolve all host-contract and deployment-path findings before feature expansion.
+5. Make tool configuration real and persist activity events.
+6. Add schema migrations, concurrency/failure policy, and a benchmark harness before production or competition claims.
 
-## Status
+## Change discipline
 
-Foundation phase. The core domain/service baseline is implemented and locally tested; the Agent Zero plugin identity is `neuro_core_2`; live host validation and post-restart persistence have been verified and recorded in GitHub. Remaining unproven areas include concurrency, security, observability, and benchmark claims.
+Every behavior change needs a `unittest` update. Record lifecycle, ranking, or public-contract decisions in `docs/decisions/`. Preserve constructor and port compatibility or provide a deliberate migration. Keep implemented, planned, and unverified behavior clearly separated.
+
+## Acceptance evidence
+
+For deployment work, record the Agent Zero version/commit, install command, plugin discovery result, capture/retrieve/validate inputs and outputs, database path, test output, and deviations in a dated issue, PR, or `docs/validation/` artifact.

@@ -71,3 +71,4 @@ Every behavior change needs a `unittest` update. Record lifecycle, ranking, or p
 ## Acceptance evidence
 
 For deployment work, record the Agent Zero version/commit, install command, plugin discovery result, capture/retrieve/validate inputs and outputs, database path, test output, and deviations in a dated issue, PR, or `docs/validation/` artifact.
+<!-- Test: GitHub write capability verification (WI-2026-08-17-GITHUB-WRITE-CAPABILITY-TEST) -->

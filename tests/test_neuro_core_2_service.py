@@ -2,8 +2,8 @@ import unittest
 
 from memory_lifecycle import ValidationState
 from memory_store import InMemoryStore
-from neuro_core import Memory, Scope
-from neuro_service import NeuroCoreService
+from neuro_core_2 import Memory, Scope
+from neuro_core_2_service import NeuroCoreService
 
 
 class NeuroCoreServiceTests(unittest.TestCase):

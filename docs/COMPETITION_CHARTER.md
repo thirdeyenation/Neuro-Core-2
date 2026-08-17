@@ -32,16 +32,16 @@ Neuro Core 2 claims:
 
 ## Evidence
 
-- Verified host run on 2026-08-05 with plugin identity `neuro_core_2`, capture/retrieve/validate/supersede flow, cross-scope isolation, and writable SQLite store evidence. See `docs/validation/2026-08-05-agent-zero-host-validation.md`.
-- Post-restart persistence check on 2026-08-05: database survived restart, remained writable, and capture/retrieve worked after restart. See `docs/validation/2026-08-05-post-restart-persistence-check.md`.
+- Verified host run on 2026-08-05 with plugin identity `neuro_core_2`, capture/retrieve/validate/supersede flow, cross-scope isolation, and writable SQLite store evidence. See `/a0/usr/plugins/neuro_core_2/docs/validation/2026-08-05-agent-zero-host-validation.md`.
+- Post-restart persistence check on 2026-08-05: database survived restart, remained writable, and capture/retrieve worked after restart. See `/a0/usr/plugins/neuro_core_2/docs/validation/2026-08-05-post-restart-persistence-check.md`.
 - Schema compatibility regression test in `test_sqlite_store.py` that exercises restart plus additive activity writes.
 - ADRs documenting:
-  - Product and architecture (`docs/decisions/0001-product-and-architecture.md`),
-  - Plugin identity and integration strategy (`0002-plugin-identity-and-integration-strategy.md`),
-  - Neuro Core 2 identity and host validation (`0003-neuro-core-2-identity-and-host-validation.md`),
-  - Audit durability and migration policy (`0004-audit-durability-and-migration-policy.md`),
-  - Concurrency and migration policy (`0005-concurrency-and-migration-policy.md`),
-  - Implementation rules for SQLite durability (`0006-implementation-rules-for-sqlite-durability.md`).
+  - Product and architecture (`/a0/usr/plugins/neuro_core_2/docs/decisions/0001-product-and-architecture.md`),
+  - Plugin identity and integration strategy (`/a0/usr/plugins/neuro_core_2/0002-plugin-identity-and-integration-strategy.md`),
+  - Neuro Core 2 identity and host validation (/a0/usr/plugins/neuro_core_2/0003-neuro-core-2-identity-and-host-validation.md`),
+  - Audit durability and migration policy (`/a0/usr/plugins/neuro_core_2/0004-audit-durability-and-migration-policy.md`),
+  - Concurrency and migration policy (`/a0/usr/plugins/neuro_core_2/0005-concurrency-and-migration-policy.md`),
+  - Implementation rules for SQLite durability (`/a0/usr/plugins/neuro_core_2/0006-implementation-rules-for-sqlite-durability.md`).
 
 ## Out of scope
 

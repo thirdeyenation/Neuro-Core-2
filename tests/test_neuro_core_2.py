@@ -1,6 +1,6 @@
 import unittest
 
-from neuro_core import Memory, Scope, retrieve
+from neuro_core_2 import Memory, Scope, retrieve
 
 
 class RetrievalTests(unittest.TestCase):

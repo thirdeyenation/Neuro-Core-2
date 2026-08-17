@@ -25,6 +25,8 @@ def retrieve(query: str, scope: Scope, memories: list[Memory]) -> list[dict]:
         if memory.scope != scope or not retrievable(memory.validation):
             continue
         overlap = len(terms & set(memory.text.lower().split())) / max(len(terms), 1)
+        if overlap == 0:
+            continue
         score = round(.5 * overlap + .25 * memory.importance + .25 * memory.confidence, 6)
         results.append({"memory": memory, "score": score, "factors": {"overlap": overlap, "importance": memory.importance, "confidence": memory.confidence, "validation": memory.validation}})
     return sorted(results, key=lambda item: item["score"], reverse=True)

@@ -11,20 +11,30 @@ Evidence-first, scoped memory for Agent Zero v2.8+. This repository implements t
    ```
    then reload plugins and record the exact Agent Zero version/commit.
 3. Smoke-test with one project/agent scope:
-   - Capture a memory via `NeuroCore2Capture`.
-   - Retrieve it via `NeuroCore2Retrieve`.
-   - Validate or supersede it via `NeuroCore2Validate`.
+   - Capture a memory via `neuro_core_2_capture.py`.
+   - Retrieve it via `neuro_core_2_retrieve.py`.
+   - Validate or supersede it via `neuro_core_2_validate.py`.
    - Confirm superseded memories no longer appear in retrieval.
+
+### Structure
+
+- `default_config.yaml` — plugin-local defaults (database path, etc.).
+- `install.py` — copies plugin files into the Agent Zero container.
+- `plugin.yaml` — Agent Zero plugin manifest (name: `neuro_core_2`).
+- `tools/` — `neuro_core_2_capture.py`, `neuro_core_2_retrieve.py`, `neuro_core_2_validate.py`.
+- `scripts/` — verify to sanity-check the core modules.
+- `docs/` — contains `decisions/` folder, `validation/` folder, and loose markdown files that provide critical information   and context that should be read and followed prior to beginning any continued development of the Neuro Core 2 plugin.
+- `tests/` — contains all existing and future test scripts 
 
 ## What's implemented
 
 - Framework-independent domain: immutable `Memory`, `Scope`, lexical/trust ranking, and factor-level retrieval explanations.
 - Lifecycle policy: `unreviewed`, `validated`, `disputed`, and terminal `superseded`; superseded memories are excluded from retrieval, not deleted.
-- Append-only in-process activity ledger.
-- `MemoryStore` port with in-memory and SQLite adapters.
-- `NeuroCoreService` composing capture, retrieve, validation, storage, and activity events.
+- Append-only in-process activity ledger (`activity_ledger.py`).
+- `memory_store.py` port with in-memory and SQLite adapters.
+- `neuro_core_2_service.py` composing capture, retrieve, validation, storage, and activity events.
 - Standard-library tests for scope isolation, lifecycle, storage, SQLite persistence, and service flow.
-- Agent Zero plugin (`neuro_core_2`) with `NeuroCore2Capture`, `NeuroCore2Retrieve`, and `NeuroCore2Validate` tools.
+- Agent Zero plugin (`neuro_core_2`) with `neuro_core_2_capture.py`, `neuro_core_2_retrieve.py`, and `neuro_core_2_validate.py` tools (under `tools/`).
 - Verified Agent Zero host run on 2026-08-05 with plugin identity `neuro_core_2`, capture/retrieve/validate/supersede flow, cross-scope isolation, and writable SQLite store evidence. See `docs/validation/2026-08-05-agent-zero-host-validation.md`.
 - Verified post-restart persistence check on 2026-08-05: database survived restart, remained writable, and capture/retrieve worked after restart. See `docs/validation/2026-08-05-post-restart-persistence-check.md`.
 - Durable activity-event persistence in SQLite alongside memories, with a tiny read path via `NeuroCoreService.list_activity(...)`.
@@ -71,4 +81,3 @@ Every behavior change needs a `unittest` update. Record lifecycle, ranking, or p
 ## Acceptance evidence
 
 For deployment work, record the Agent Zero version/commit, install command, plugin discovery result, capture/retrieve/validate inputs and outputs, database path, test output, and deviations in a dated issue, PR, or `docs/validation/` artifact.
-<!-- Test: GitHub write capability verification (WI-2026-08-17-GITHUB-WRITE-CAPABILITY-TEST) -->

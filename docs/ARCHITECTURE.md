@@ -4,17 +4,17 @@ Neuro Core 2 is a scoped, auditable memory capability for Agent Zero v2.8+. It p
 
 ## Components
 
-- **Domain** (`neuro_core.py`): `Memory`, `Scope`, and retrieval with factor-level explanations.
+- **Domain** (`neuro_core_2.py`): `Memory`, `Scope`, and retrieval with factor-level explanations.
 - **Lifecycle** (`memory_lifecycle.py`): states `unreviewed`, `validated`, `disputed`, `superseded`.
 - **Storage port** (`memory_store.py`): `MemoryStore` interface.
 - **SQLite adapter** (`sqlite_store.py`): durable `MemoryStore` implementation.
 - **Activity ledger** (`activity_ledger.py`): append-only event log.
-- **Service** (`neuro_service.py`): composes capture, retrieve, validate, store, and activity.
+- **Service** (`neuro_core_2_service.py`): composes capture, retrieve, validate, store, and activity.
 - **Plugin** (`plugins/neuro_core_2/`): Agent Zero tools `NeuroCore2Capture`, `NeuroCore2Retrieve`, `NeuroCore2Validate`.
 
 ## Data flow
 
-1. Tools call `NeuroCoreService` with explicit `Scope(project, agent)`.
+1. Tools call `NeuroCore2Service` with explicit `Scope(project, agent)`.
 2. Service writes to `MemoryStore` and appends to `ActivityLedger`.
 3. Retrieval ranks candidates lexically and by trust, returning factors.
 4. Superseded memories remain stored but are excluded from retrieval.
@@ -27,8 +27,8 @@ Neuro Core 2 is a scoped, auditable memory capability for Agent Zero v2.8+. It p
 
 ## Boundaries
 
-- Core modules (`neuro_core.py`, `memory_lifecycle.py`, `memory_store.py`, `sqlite_store.py`, `activity_ledger.py`, `neuro_service.py`) are host-independent.
-- All Agent Zero integration lives under `plugins/neuro_core_2/`.
+- Core modules (`neuro_core_2.py`, `memory_lifecycle.py`, `memory_store.py`, `sqlite_store.py`, `activity_ledger.py`, `neuro_core_2_service.py`) are host-independent.
+- All Agent Zero integration lives under `/a0/usr/plugins/neuro_core_2/`.
 - Scope isolation is strict: `Scope(project, agent)` is a hard boundary.
 
 ## Non-goals (for now)

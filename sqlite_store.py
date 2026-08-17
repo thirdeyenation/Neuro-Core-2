@@ -1,11 +1,13 @@
 """SQLite implementation of the Neuro Core memory-store port."""
 import sqlite3
+from datetime import datetime
 from memory_lifecycle import ValidationState
-from neuro_core import Memory, Scope
+from neuro_core_2 import Memory, Scope
+from activity_ledger import ActivityEvent
 
 
 class SQLiteStore:
-    def __init__(self, path: str = "neuro_core.db") -> None:
+    def __init__(self, path: str = "neuro_core_2.db") -> None:
         self.connection = sqlite3.connect(path)
         self.connection.execute("CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, text TEXT, source TEXT, project TEXT, agent TEXT, importance REAL, confidence REAL, validation TEXT)")
         self.connection.execute("CREATE TABLE IF NOT EXISTS activity_events (event_id TEXT PRIMARY KEY, kind TEXT, project TEXT, agent TEXT, targets TEXT, outcome TEXT, source TEXT, occurred_at TEXT)")
@@ -20,7 +22,10 @@ class SQLiteStore:
         return self._memory(row) if row else None
 
     def list(self, scope: Scope) -> tuple[Memory, ...]:
-        rows = self.connection.execute("SELECT * FROM memories WHERE project = ? AND agent IS ?", (scope.project, scope.agent)).fetchall()
+        if scope.agent is None:
+            rows = self.connection.execute("SELECT * FROM memories WHERE project = ? AND agent IS NULL", (scope.project,)).fetchall()
+        else:
+            rows = self.connection.execute("SELECT * FROM memories WHERE project = ? AND agent = ?", (scope.project, scope.agent)).fetchall()
         return tuple(self._memory(row) for row in rows)
 
     def append_event(self, event) -> None:
@@ -30,12 +35,27 @@ class SQLiteStore:
         )
         self.connection.commit()
 
-    def list_events(self, scope: Scope | None = None) -> tuple[tuple, ...]:
+    def list_events(self, scope: Scope | None = None) -> tuple[ActivityEvent, ...]:
         if scope is None:
             rows = self.connection.execute("SELECT event_id, kind, project, agent, targets, outcome, source, occurred_at FROM activity_events ORDER BY occurred_at ASC").fetchall()
         else:
-            rows = self.connection.execute("SELECT event_id, kind, project, agent, targets, outcome, source, occurred_at FROM activity_events WHERE project = ? AND agent IS ? ORDER BY occurred_at ASC", (scope.project, scope.agent)).fetchall()
-        return tuple(rows)
+            if scope.agent is None:
+                rows = self.connection.execute("SELECT event_id, kind, project, agent, targets, outcome, source, occurred_at FROM activity_events WHERE project = ? AND agent IS NULL ORDER BY occurred_at ASC", (scope.project,)).fetchall()
+            else:
+                rows = self.connection.execute("SELECT event_id, kind, project, agent, targets, outcome, source, occurred_at FROM activity_events WHERE project = ? AND agent = ? ORDER BY occurred_at ASC", (scope.project, scope.agent)).fetchall()
+        return tuple(self._event(row) for row in rows)
+
+    @staticmethod
+    def _event(row: tuple) -> ActivityEvent:
+        return ActivityEvent(
+            kind=row[1],
+            scope=Scope(row[2], row[3]),
+            targets=tuple(row[4].split(",")) if row[4] else (),
+            outcome=row[5],
+            evidence={"source": row[6]} if row[6] else {},
+            event_id=row[0],
+            occurred_at=datetime.fromisoformat(row[7]),
+        )
 
     @staticmethod
     def _memory(row: tuple) -> Memory:

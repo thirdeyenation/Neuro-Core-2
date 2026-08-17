@@ -2,7 +2,7 @@
 from activity_ledger import ActivityEvent, ActivityLedger
 from memory_lifecycle import ValidationState, transition
 from memory_store import MemoryStore
-from neuro_core import Memory, Scope, retrieve
+from neuro_core_2 import Memory, Scope, retrieve
 
 
 class NeuroCoreService:
@@ -30,7 +30,7 @@ class NeuroCoreService:
         self._event("validation_changed", updated, target.value)
         return updated
 
-    def list_activity(self, scope: Scope | None = None):
+    def list_activity(self, scope: Scope | None = None) -> tuple[tuple, ...] | tuple[ActivityEvent, ...]:
         list_events = getattr(self.store, "list_events", None)
         if callable(list_events):
             return list_events(scope)

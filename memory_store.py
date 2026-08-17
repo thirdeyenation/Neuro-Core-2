@@ -1,7 +1,7 @@
 """Storage boundary for Neuro Core; durable backends implement this port."""
 from collections.abc import Iterable
 from typing import Protocol
-from neuro_core import Memory, Scope
+from neuro_core_2 import Memory, Scope
 
 class MemoryStore(Protocol):
     def put(self, memory: Memory) -> Memory: ...

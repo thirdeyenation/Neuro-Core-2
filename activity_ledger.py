@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from neuro_core import Scope
+from neuro_core_2 import Scope
 
 
 @dataclass(frozen=True)

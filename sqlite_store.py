@@ -4,17 +4,34 @@ from datetime import datetime
 from memory_lifecycle import ValidationState
 from neuro_core_2 import Memory, Scope
 from activity_ledger import ActivityEvent
+from migrations import run_migrations
+
+# Default busy timeout in milliseconds. This is the bounded wait a writer
+# tolerates when another writer holds the SQLite write lock. It is
+# configurable via the busy_timeout_ms constructor argument; the default
+# is 5000 ms (5 seconds).
+DEFAULT_BUSY_TIMEOUT_MS = 5000
 
 
 class SQLiteStore:
-    def __init__(self, path: str = "neuro_core_2.db") -> None:
-        self.connection = sqlite3.connect(path)
-        self.connection.execute("CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, text TEXT, source TEXT, project TEXT, agent TEXT, importance REAL, confidence REAL, validation TEXT)")
-        self.connection.execute("CREATE TABLE IF NOT EXISTS activity_events (event_id TEXT PRIMARY KEY, kind TEXT, project TEXT, agent TEXT, targets TEXT, outcome TEXT, source TEXT, occurred_at TEXT)")
+    def __init__(self, path: str = "neuro_core_2.db", busy_timeout_ms: int = DEFAULT_BUSY_TIMEOUT_MS) -> None:
+        self.connection = sqlite3.connect(path, isolation_level=None)
+        self.connection.execute(f"PRAGMA busy_timeout = {int(busy_timeout_ms)}")
+        try:
+            run_migrations(self.connection)
+        except Exception:
+            self.connection.close()
+            raise
 
     def put(self, memory: Memory) -> Memory:
-        self.connection.execute("INSERT OR REPLACE INTO memories VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (memory.memory_id, memory.text, memory.source, memory.scope.project, memory.scope.agent, memory.importance, memory.confidence, memory.validation.value))
-        self.connection.commit()
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            self.connection.execute("INSERT OR REPLACE INTO memories VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (memory.memory_id, memory.text, memory.source, memory.scope.project, memory.scope.agent, memory.importance, memory.confidence, memory.validation.value))
+            self.connection.commit()
+        except Exception:
+            if self.connection.in_transaction:
+                self.connection.rollback()
+            raise
         return memory
 
     def get(self, memory_id: str) -> Memory | None:
@@ -29,11 +46,17 @@ class SQLiteStore:
         return tuple(self._memory(row) for row in rows)
 
     def append_event(self, event) -> None:
-        self.connection.execute(
-            "INSERT OR REPLACE INTO activity_events VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (event.event_id, event.kind, event.scope.project, event.scope.agent, ",".join(event.targets), event.outcome, event.evidence.get("source", ""), event.occurred_at.isoformat()),
-        )
-        self.connection.commit()
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            self.connection.execute(
+                "INSERT OR REPLACE INTO activity_events VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (event.event_id, event.kind, event.scope.project, event.scope.agent, ",".join(event.targets), event.outcome, event.evidence.get("source", ""), event.occurred_at.isoformat()),
+            )
+            self.connection.commit()
+        except Exception:
+            if self.connection.in_transaction:
+                self.connection.rollback()
+            raise
 
     def list_events(self, scope: Scope | None = None) -> tuple[ActivityEvent, ...]:
         if scope is None:
@@ -44,6 +67,15 @@ class SQLiteStore:
             else:
                 rows = self.connection.execute("SELECT event_id, kind, project, agent, targets, outcome, source, occurred_at FROM activity_events WHERE project = ? AND agent = ? ORDER BY occurred_at ASC", (scope.project, scope.agent)).fetchall()
         return tuple(self._event(row) for row in rows)
+
+    def schema_version(self) -> int:
+        """Return the current schema version (PRAGMA user_version).
+
+        Internal API only. This method is not part of the MemoryStore port
+        and is not exposed through any tool. PRAGMA user_version is owned
+        by the migration runner; this method only reads it.
+        """
+        return self.connection.execute("PRAGMA user_version").fetchone()[0]
 
     @staticmethod
     def _event(row: tuple) -> ActivityEvent:

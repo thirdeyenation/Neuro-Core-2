@@ -1,6 +1,0 @@
-name: neuro_core_2
-version: 0.1.0
-author: Third Eye Nation
-about: |-
-  Neuro Core 2: scoped, auditable memory for Agent Zero.
-  Provides capture, retrieval, and validation tools backed by SQLite.

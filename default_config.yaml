@@ -1,5 +1,5 @@
 neuro_core_2:
-  database_path: "plugins/neuro_core_2/neuro_core_2.db"
+  database_path: "neuro_core_2.db"
   default_scope:
     project: "default"
     agent: null

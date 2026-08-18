@@ -143,10 +143,11 @@ def validate_manifest_behavior():
 
 def validate_imports():
     """Verify all copied .py files import without error."""
+    here_tools_str = str(HERE / "tools")
     target_str = str(TARGET)
     tools_str = str(TOOLS_DST)
     added = []
-    for p in (target_str, tools_str):
+    for p in (here_tools_str, target_str, tools_str):
         if p not in sys.path:
             sys.path.insert(0, p)
             added.append(p)

@@ -1,6 +1,6 @@
 # Neuro Core 2
 
-Evidence-first, scoped memory for Agent Zero v2.8+. This repository implements the Neuro Core 2 plugin: capture, retrieval, and validation tools backed by SQLite, with explicit memory lifecycle and audit.
+Evidence-first, scoped memory for Agent Zero v2.8+. This repository implements the Neuro Core 2 plugin: capture, retrieval, validation, and audit tools backed by SQLite, with explicit memory lifecycle and audit.
 
 ## Quick start
 
@@ -14,6 +14,7 @@ Evidence-first, scoped memory for Agent Zero v2.8+. This repository implements t
    - Capture a memory via `neuro_core_2_capture.py`.
    - Retrieve it via `neuro_core_2_retrieve.py`.
    - Validate or supersede it via `neuro_core_2_validate.py`.
+   - Query activity events via `neuro_core_2_audit.py`.
    - Confirm superseded memories no longer appear in retrieval.
 
 ### Structure
@@ -21,7 +22,7 @@ Evidence-first, scoped memory for Agent Zero v2.8+. This repository implements t
 - `default_config.yaml` — plugin-local defaults (database path, etc.).
 - `install.py` — copies plugin files into the Agent Zero container.
 - `plugin.yaml` — Agent Zero plugin manifest (name: `neuro_core_2`).
-- `tools/` — `neuro_core_2_capture.py`, `neuro_core_2_retrieve.py`, `neuro_core_2_validate.py`.
+- `tools/` — `neuro_core_2_capture.py`, `neuro_core_2_retrieve.py`, `neuro_core_2_validate.py`, `neuro_core_2_audit.py`.
 - `scripts/` — verify to sanity-check the core modules.
 - `docs/` — contains `decisions/` folder, `validation/` folder, and loose markdown files that provide critical information   and context that should be read and followed prior to beginning any continued development of the Neuro Core 2 plugin.
 - `tests/` — contains all existing and future test scripts 
@@ -34,7 +35,8 @@ Evidence-first, scoped memory for Agent Zero v2.8+. This repository implements t
 - `memory_store.py` port with in-memory and SQLite adapters.
 - `neuro_core_2_service.py` composing capture, retrieve, validation, storage, and activity events.
 - Standard-library tests for scope isolation, lifecycle, storage, SQLite persistence, and service flow.
-- Agent Zero plugin (`neuro_core_2`) with `neuro_core_2_capture.py`, `neuro_core_2_retrieve.py`, and `neuro_core_2_validate.py` tools (under `tools/`).
+- Agent Zero plugin (`neuro_core_2`) with `neuro_core_2_capture.py`, `neuro_core_2_retrieve.py`, `neuro_core_2_validate.py`, and `neuro_core_2_audit.py` tools (under `tools/`).
+- `NeuroCore2Audit` tool exposing durable cross-session audit queries via `NeuroCoreService.list_activity(...)`, with explicit scope construction, optional filters (`event_type`, `memory_id`, `start_date`, `end_date`), `occurred_at` DESC ordering, and limit enforcement (default 100, max 1000).
 - Verified Agent Zero host run on 2026-08-05 with plugin identity `neuro_core_2`, capture/retrieve/validate/supersede flow, cross-scope isolation, and writable SQLite store evidence. See `docs/validation/2026-08-05-agent-zero-host-validation.md`.
 - Verified post-restart persistence check on 2026-08-05: database survived restart, remained writable, and capture/retrieve worked after restart. See `docs/validation/2026-08-05-post-restart-persistence-check.md`.
 - Durable activity-event persistence in SQLite alongside memories, with a tiny read path via `NeuroCoreService.list_activity(...)`.
@@ -44,7 +46,6 @@ Evidence-first, scoped memory for Agent Zero v2.8+. This repository implements t
 ## What is not proven
 
 - Performance, concurrency, security, benchmark, or competition claims. Do not assert these as completed.
-- Durable cross-session audit querying surface beyond the service method.
 - Tool configuration sourced from `default_config.yaml` instead of hardcoded paths (design intent; implementation may still be evolving).
 
 ## Non-negotiable decisions
@@ -61,15 +62,22 @@ Evidence-first, scoped memory for Agent Zero v2.8+. This repository implements t
 - Ranking is a correctness baseline, not semantic retrieval.
 - SQLite opens per invocation and has no migration or concurrency strategy.
 - Tool code should load the plugin-local database path from `default_config.yaml` at runtime.
-- Activity events are durably appended when the underlying store supports it, but cross-invocation audit querying is not yet exposed as a tool.
+- Activity events are durably appended when the underlying store supports it.
 - The installer copies files but does not validate imports, discovery, permissions, or manifest behavior.
 - There is no authorization policy, input-size control, observability, or evaluation harness.
+
+
+## Known limitations
+
+- The audit tool's date-range filters (`start_date`, `end_date`) are implemented but not covered by dedicated unit tests.
+- Offset-based pagination for audit queries is not implemented (deferred).
+- Host-level behavior of the audit tool (Agent Zero tool dispatcher registration, runtime tool invocation, WebUI integration) is not verified at unit level.
 
 ## Completion sequence
 
 1. Run `python scripts/verify.py`.
 2. In the target Agent Zero container, run `python plugins/neuro_core_2/install.py`, reload plugins, and record the exact Agent Zero version/commit.
-3. Smoke-test capture, retrieve, and validate with one project/agent scope; confirm superseded records disappear from retrieval.
+3. Smoke-test capture, retrieve, validate, and audit with one project/agent scope; confirm superseded records disappear from retrieval and audit returns expected activity events.
 4. Resolve all host-contract and deployment-path findings before feature expansion.
 5. Make tool configuration real and persist activity events.
 6. Add schema migrations, concurrency/failure policy, and a benchmark harness before production or competition claims.

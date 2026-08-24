@@ -1,5 +1,7 @@
 neuro_core_2:
   database_path: "neuro_core_2.db"
+  busy_timeout_ms: 5000
+  max_results: 100
   default_scope:
     project: "default"
     agent: null

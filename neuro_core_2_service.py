@@ -15,11 +15,54 @@ class NeuroCoreService:
         self._event("captured", memory, "stored")
         return memory
 
-    def retrieve(self, query: str, scope: Scope) -> list[dict]:
-        results = retrieve(query, scope, list(self.store.list(scope)))
+    def retrieve(self, query: str, scope: Scope, max_results: int | None = None) -> list[dict]:
+        """Backward-compatible retrieve returning the ranked result list.
+
+        Uses candidate_ids as a pure candidate pre-filter before domain
+        scoring, then applies the result cap after scoring and sorting.
+        Returns only the result list (no cap metadata) for compatibility
+        with existing callers; use retrieve_with_meta() for the full
+        payload including count_exceeded and total_matches.
+        """
+        return self.retrieve_with_meta(query, scope, max_results)["results"]
+
+    def retrieve_with_meta(self, query: str, scope: Scope, max_results: int | None = None) -> dict:
+        """Retrieve with cap metadata.
+
+        Returns a dict with:
+          - results: ranked result list (same shape as domain retrieve())
+          - count_exceeded: True when the full match count exceeds max_results
+          - total_matches: the full match count before the cap
+
+        The index is a pure candidate pre-filter: candidate_ids(terms, scope)
+        returns exactly the memories within scope whose text.lower().split()
+        has non-empty intersection with query.lower().split(). Scoring,
+        ranking, and the factors dict remain in the domain retrieve()
+        function and are unchanged. The cap is applied AFTER scoring and
+        sorting (top-K selection), never before. Silent truncation is
+        prohibited: callers receive count_exceeded and total_matches.
+        """
+        terms = set(query.lower().split())
+        candidate_ids = getattr(self.store, "candidate_ids", None)
+        if callable(candidate_ids):
+            ids = candidate_ids(terms, scope)
+            memories = [self.store.get(mid) for mid in ids]
+            memories = [m for m in memories if m is not None]
+        else:
+            memories = list(self.store.list(scope))
+        results = retrieve(query, scope, memories)
+        total_matches = len(results)
+        count_exceeded = False
+        if max_results is not None and total_matches > max_results:
+            results = results[:max_results]
+            count_exceeded = True
         for item in results:
             self._event("retrieved", item["memory"], "selected")
-        return results
+        return {
+            "results": results,
+            "count_exceeded": count_exceeded,
+            "total_matches": total_matches,
+        }
 
     def validate(self, memory_id: str, target: ValidationState) -> Memory:
         current = self.store.get(memory_id)

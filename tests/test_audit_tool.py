@@ -16,6 +16,8 @@ from neuro_core_2_service import NeuroCoreService
 from sqlite_store import SQLiteStore
 from neuro_core_2 import Memory, Scope
 from memory_lifecycle import ValidationState
+from datetime import datetime, timezone
+from activity_ledger import ActivityEvent
 
 
 def _make_temp_db():
@@ -228,6 +230,79 @@ def test_all_fields_serialized():
         os.unlink(config_path)
 
 
+def test_start_date_filter():
+    """Events before start_date must be excluded."""
+    db_path = _make_temp_db()
+    config_path = _write_config(db_path)
+    original_path = _patch_config(config_path)
+
+    try:
+        store = SQLiteStore(db_path)
+        scope = Scope("projA", "agent1")
+        store.append_event(ActivityEvent("captured", scope, ("early",), "stored", {"source": "tool"}, occurred_at=datetime(2026, 8, 1, tzinfo=timezone.utc)))
+        store.append_event(ActivityEvent("captured", scope, ("late",), "stored", {"source": "tool"}, occurred_at=datetime(2026, 8, 10, tzinfo=timezone.utc)))
+
+        result = neuro_core_2_audit(project="projA", agent="agent1", start_date="2026-08-02")
+        assert len(result["events"]) == 1
+        assert "late" in result["events"][0]["targets"]
+
+        print("test_start_date_filter ... ok")
+    finally:
+        import _config
+        _config._CONFIG_PATH = original_path
+        os.unlink(db_path)
+        os.unlink(config_path)
+
+
+def test_end_date_filter():
+    """Events after end_date must be excluded."""
+    db_path = _make_temp_db()
+    config_path = _write_config(db_path)
+    original_path = _patch_config(config_path)
+
+    try:
+        store = SQLiteStore(db_path)
+        scope = Scope("projA", "agent1")
+        store.append_event(ActivityEvent("captured", scope, ("early",), "stored", {"source": "tool"}, occurred_at=datetime(2026, 8, 1, tzinfo=timezone.utc)))
+        store.append_event(ActivityEvent("captured", scope, ("late",), "stored", {"source": "tool"}, occurred_at=datetime(2026, 8, 10, tzinfo=timezone.utc)))
+
+        result = neuro_core_2_audit(project="projA", agent="agent1", end_date="2026-08-05")
+        assert len(result["events"]) == 1
+        assert "early" in result["events"][0]["targets"]
+
+        print("test_end_date_filter ... ok")
+    finally:
+        import _config
+        _config._CONFIG_PATH = original_path
+        os.unlink(db_path)
+        os.unlink(config_path)
+
+
+def test_date_range_filter():
+    """Combined start_date and end_date must return only events in range."""
+    db_path = _make_temp_db()
+    config_path = _write_config(db_path)
+    original_path = _patch_config(config_path)
+
+    try:
+        store = SQLiteStore(db_path)
+        scope = Scope("projA", "agent1")
+        store.append_event(ActivityEvent("captured", scope, ("before",), "stored", {"source": "tool"}, occurred_at=datetime(2026, 8, 1, tzinfo=timezone.utc)))
+        store.append_event(ActivityEvent("captured", scope, ("inside",), "stored", {"source": "tool"}, occurred_at=datetime(2026, 8, 10, tzinfo=timezone.utc)))
+        store.append_event(ActivityEvent("captured", scope, ("after",), "stored", {"source": "tool"}, occurred_at=datetime(2026, 8, 20, tzinfo=timezone.utc)))
+
+        result = neuro_core_2_audit(project="projA", agent="agent1", start_date="2026-08-05", end_date="2026-08-15")
+        assert len(result["events"]) == 1
+        assert "inside" in result["events"][0]["targets"]
+
+        print("test_date_range_filter ... ok")
+    finally:
+        import _config
+        _config._CONFIG_PATH = original_path
+        os.unlink(db_path)
+        os.unlink(config_path)
+
+
 if __name__ == "__main__":
     test_scope_isolation_across_projects()
     test_agent_none_means_project_level_scope()
@@ -236,4 +311,7 @@ if __name__ == "__main__":
     test_ordering_desc_by_occurred_at()
     test_limit_default_and_max()
     test_all_fields_serialized()
+    test_start_date_filter()
+    test_end_date_filter()
+    test_date_range_filter()
     print("\nAll audit tool tests passed!")

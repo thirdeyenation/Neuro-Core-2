@@ -36,11 +36,11 @@ class MigrationTests(unittest.TestCase):
         os.close(descriptor)
         return path
 
-    def test_fresh_db_migrates_to_version_1_and_is_writable(self):
+    def test_fresh_db_migrates_to_version_2_and_is_writable(self):
         path = self._temp_db()
         try:
             store = SQLiteStore(path)
-            self.assertEqual(store.schema_version(), 1)
+            self.assertEqual(store.schema_version(), 2)
             tables = {
                 row[0]
                 for row in store.connection.execute(
@@ -49,6 +49,7 @@ class MigrationTests(unittest.TestCase):
             }
             self.assertIn("memories", tables)
             self.assertIn("activity_events", tables)
+            self.assertIn("memory_terms", tables)
             memory = Memory("fresh db", "fixture", Scope("alpha"))
             store.put(memory)
             self.assertEqual(store.get(memory.memory_id), memory)
@@ -76,13 +77,17 @@ class MigrationTests(unittest.TestCase):
             conn.close()
 
             store = SQLiteStore(path)
-            self.assertEqual(store.schema_version(), 1)
+            self.assertEqual(store.schema_version(), 2)
             memory = store.get("legacy-1")
             self.assertIsNotNone(memory)
             self.assertEqual(memory.text, "legacy memory")
             events = store.list_events(Scope("alpha"))
             self.assertEqual(len(events), 1)
             self.assertEqual(events[0].event_id, "evt-1")
+            # The version-2 index is backfilled from existing memories.text.
+            self.assertEqual(
+                store.candidate_ids(["legacy"], Scope("alpha")), ("legacy-1",)
+            )
             store.close()
         finally:
             os.unlink(path)
@@ -97,11 +102,11 @@ class MigrationTests(unittest.TestCase):
 
             conn = sqlite3.connect(path)
             run_migrations(conn)
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 1)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 2)
             conn.close()
 
             store = SQLiteStore(path)
-            self.assertEqual(store.schema_version(), 1)
+            self.assertEqual(store.schema_version(), 2)
             self.assertEqual(store.get(memory.memory_id), memory)
             store.close()
         finally:
@@ -111,7 +116,7 @@ class MigrationTests(unittest.TestCase):
         path = self._temp_db()
         try:
             conn = sqlite3.connect(path)
-            conn.execute("PRAGMA user_version = 2")
+            conn.execute("PRAGMA user_version = 3")
             conn.commit()
             conn.close()
 
@@ -121,7 +126,7 @@ class MigrationTests(unittest.TestCase):
 
             # No corruption: the version marker is untouched.
             conn = sqlite3.connect(path)
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 3)
             conn.close()
         finally:
             os.unlink(path)

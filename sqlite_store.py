@@ -1,6 +1,10 @@
 """SQLite implementation of the Neuro Core memory-store port."""
 import sqlite3
 from datetime import datetime
+from pathlib import Path
+
+import yaml
+
 from memory_lifecycle import ValidationState
 from neuro_core_2 import Memory, Scope
 from activity_ledger import ActivityEvent
@@ -8,13 +12,33 @@ from migrations import run_migrations
 
 # Default busy timeout in milliseconds. This is the bounded wait a writer
 # tolerates when another writer holds the SQLite write lock. It is
-# configurable via the busy_timeout_ms constructor argument; the default
-# is 5000 ms (5 seconds).
+# configurable at runtime via the busy_timeout_ms key in default_config.yaml
+# or via the busy_timeout_ms constructor argument; the default is 5000 ms
+# (5 seconds).
 DEFAULT_BUSY_TIMEOUT_MS = 5000
+
+_CONFIG_PATH = Path(__file__).resolve().parent / "default_config.yaml"
+
+
+def _load_busy_timeout_ms() -> int:
+    """Read busy_timeout_ms from default_config.yaml at runtime.
+
+    Falls back to DEFAULT_BUSY_TIMEOUT_MS if the key is absent or the
+    config file cannot be read, so the store remains usable in all
+    environments.
+    """
+    try:
+        with _CONFIG_PATH.open() as f:
+            cfg = yaml.safe_load(f)
+        return int(cfg["neuro_core_2"]["busy_timeout_ms"])
+    except Exception:
+        return DEFAULT_BUSY_TIMEOUT_MS
 
 
 class SQLiteStore:
-    def __init__(self, path: str = "neuro_core_2.db", busy_timeout_ms: int = DEFAULT_BUSY_TIMEOUT_MS) -> None:
+    def __init__(self, path: str = "neuro_core_2.db", busy_timeout_ms: int | None = None) -> None:
+        if busy_timeout_ms is None:
+            busy_timeout_ms = _load_busy_timeout_ms()
         self.connection = sqlite3.connect(path, isolation_level=None)
         self.connection.execute(f"PRAGMA busy_timeout = {int(busy_timeout_ms)}")
         try:
@@ -27,6 +51,16 @@ class SQLiteStore:
         self.connection.execute("BEGIN IMMEDIATE")
         try:
             self.connection.execute("INSERT OR REPLACE INTO memories VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (memory.memory_id, memory.text, memory.source, memory.scope.project, memory.scope.agent, memory.importance, memory.confidence, memory.validation.value))
+            # Maintain the inverted-term index inside the same transaction:
+            # delete existing terms for this memory_id, then insert the new
+            # terms using the exact same tokenization as the domain
+            # retrieve() function (text.lower().split()).
+            self.connection.execute("DELETE FROM memory_terms WHERE memory_id = ?", (memory.memory_id,))
+            for term in set(memory.text.lower().split()):
+                self.connection.execute(
+                    "INSERT OR IGNORE INTO memory_terms (memory_id, term) VALUES (?, ?)",
+                    (memory.memory_id, term),
+                )
             self.connection.commit()
         except Exception:
             if self.connection.in_transaction:
@@ -44,6 +78,32 @@ class SQLiteStore:
         else:
             rows = self.connection.execute("SELECT * FROM memories WHERE project = ? AND agent = ?", (scope.project, scope.agent)).fetchall()
         return tuple(self._memory(row) for row in rows)
+
+    def candidate_ids(self, terms, scope) -> tuple[str, ...]:
+        """Return memory IDs within scope that contain any of the given terms.
+
+        Pure candidate pre-filter: the returned set is exactly the memories
+        within the requested scope whose text.lower().split() has non-empty
+        intersection with the query terms. Scope filtering happens at the SQL
+        level. No validation-state filtering is applied here — superseded
+        memories remain candidates and are excluded later by the domain
+        retrieve() function per invariant #4.
+        """
+        term_list = list(terms)
+        if not term_list:
+            return ()
+        placeholders = ", ".join("?" for _ in term_list)
+        if scope.agent is None:
+            rows = self.connection.execute(
+                f"SELECT DISTINCT m.id FROM memories m JOIN memory_terms t ON t.memory_id = m.id WHERE m.project = ? AND m.agent IS NULL AND t.term IN ({placeholders})",
+                (scope.project, *term_list),
+            ).fetchall()
+        else:
+            rows = self.connection.execute(
+                f"SELECT DISTINCT m.id FROM memories m JOIN memory_terms t ON t.memory_id = m.id WHERE m.project = ? AND m.agent = ? AND t.term IN ({placeholders})",
+                (scope.project, scope.agent, *term_list),
+            ).fetchall()
+        return tuple(row[0] for row in rows)
 
     def append_event(self, event) -> None:
         self.connection.execute("BEGIN IMMEDIATE")

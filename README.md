@@ -23,6 +23,8 @@ Evidence-first, scoped memory for Agent Zero v2.8+. This repository implements t
 - `install.py` — copies plugin files into the Agent Zero container.
 - `plugin.yaml` — Agent Zero plugin manifest (name: `neuro_core_2`).
 - `tools/` — `neuro_core_2_capture.py`, `neuro_core_2_retrieve.py`, `neuro_core_2_validate.py`, `neuro_core_2_audit.py`.
+- `hooks.py` — Agent Zero lifecycle hooks: `register_plugin` (registers plugin metadata: name=`neuro_core_2`, version=`0.1.0`, tools=`[NeuroCore2Capture, NeuroCore2Retrieve, NeuroCore2Validate]`), `on_plugin_load` (loads `default_config.yaml`, resolves `database_path`, constructs `SQLiteStore` and `NeuroCoreService`, registers the lifecycle extension), and `on_plugin_activate` (verifies database accessibility with `SELECT 1`, runs startup validation via `PRAGMA user_version`, logs activation status, returns a status dict).
+- `extensions/` — lifecycle extension modules: `extensions/__init__.py` registers a functional `SessionLifecycleExtension` (subclass of `helpers.extension.Extension`) at the `agent_init` session-lifecycle point that appends an `ActivityEvent` (kind=`session_initialized`) to the Neuro Core 2 service ledger and store.
 - `scripts/` — verify to sanity-check the core modules.
 - `docs/` — contains `decisions/` folder, `validation/` folder, and loose markdown files that provide critical information   and context that should be read and followed prior to beginning any continued development of the Neuro Core 2 plugin.
 - `tests/` — contains all existing and future test scripts 
@@ -42,11 +44,15 @@ Evidence-first, scoped memory for Agent Zero v2.8+. This repository implements t
 - Durable activity-event persistence in SQLite alongside memories, with a tiny read path via `NeuroCoreService.list_activity(...)`.
 - `NeuroCoreService.list_activity(...)` covered by a unit test for scope-filtered in-memory activity access.
 - SQLite schema compatibility protected by a regression test that exercises restart plus additive activity writes.
+- Lifecycle hook and extension integration: `hooks.py` implements `register_plugin` (plugin metadata: name=`neuro_core_2`, version=`0.1.0`, tools=`[NeuroCore2Capture, NeuroCore2Retrieve, NeuroCore2Validate]`), `on_plugin_load` (service initialization from `default_config.yaml`), and `on_plugin_activate` (database accessibility check, startup validation, activation logging); `extensions/__init__.py` registers a `SessionLifecycleExtension` at `agent_init` that appends a `session_initialized` `ActivityEvent`. Verified in-process only (39 unit tests pass; integration scenarios passed) — host-level firing against a real Agent Zero host is not yet verified.
+- Inverted-term retrieval index: a `memory_terms` table (schema version 2) is maintained on capture and used as a pure candidate pre-filter before domain scoring. Tokenization is exactly `text.lower().split()`; scoring, ranking, and the inspectable-factors explanation contract are unchanged.
+- Bounded retrieval results: `NeuroCore2Retrieve` returns at most `max_results` results (default 100, configurable via `max_results` in `default_config.yaml`; the optional `max_results` tool argument overrides the config value for a single call). The cap is applied AFTER scoring and sorting. When the full match count exceeds the cap, the payload includes `count_exceeded: true` and `total_matches: <int>` so callers can distinguish truncation from exhaustion — silent truncation is prohibited.
 
 ## What is not proven
 
 - Performance, concurrency, security, benchmark, or competition claims. Do not assert these as completed.
 - Tool configuration sourced from `default_config.yaml` instead of hardcoded paths (design intent; implementation may still be evolving).
+- Actual Agent Zero host lifecycle firing (the real framework calling `on_plugin_load`/`on_plugin_activate`/`register_extension` as part of its own plugin loading sequence) is not exercised. Only in-process code-path verification was performed.
 
 ## Non-negotiable decisions
 
@@ -65,6 +71,7 @@ Evidence-first, scoped memory for Agent Zero v2.8+. This repository implements t
 - Activity events are durably appended when the underlying store supports it.
 - The installer copies files but does not validate imports, discovery, permissions, or manifest behavior.
 - There is no authorization policy, input-size control, observability, or evaluation harness.
+- Lifecycle integration code is implemented, but host-level firing (real Agent Zero framework load/activate/agent_init invocation) remains unverified.
 
 
 ## Known limitations

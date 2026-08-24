@@ -14,7 +14,7 @@ import sqlite3
 # The highest schema version this code knows how to migrate to. Databases
 # with a user_version greater than this are rejected on open to prevent
 # accidental downgrade corruption.
-LATEST_SCHEMA_VERSION = 1
+LATEST_SCHEMA_VERSION = 2
 
 
 def _migration_1(connection: sqlite3.Connection) -> None:
@@ -31,8 +31,48 @@ def _migration_1(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_2(connection: sqlite3.Connection) -> None:
+    """Inverted-term retrieval index (version 2).
+
+    Creates the memory_terms table (memory_id, term) with an index on term
+    and backfills it from existing memories.text using the exact same
+    tokenization as the domain retrieve() function: text.lower().split().
+    The migration is additive and data-preserving: existing memories and
+    activity_events rows are untouched.
+    """
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS memory_terms (memory_id TEXT NOT NULL, term TEXT NOT NULL, PRIMARY KEY (memory_id, term))"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_terms_term ON memory_terms(term)"
+    )
+    rows = connection.execute("SELECT id, text FROM memories").fetchall()
+    for memory_id, text in rows:
+        for term in set(text.lower().split()):
+            connection.execute(
+                "INSERT OR IGNORE INTO memory_terms (memory_id, term) VALUES (?, ?)",
+                (memory_id, term),
+            )
+
+
+def _migration_2_rollback(connection: sqlite3.Connection) -> None:
+    """Explicit forward rollback migration for the version-2 index.
+
+    The migration runner refuses downgrades by design, so rolling back the
+    version-2 index is an explicit forward migration: it drops the
+    memory_terms table and resets PRAGMA user_version to 1. This function is
+    intentionally NOT registered in _MIGRATIONS — it must never run
+    automatically on open. An operator invokes it deliberately inside a
+    transaction when a rollback of the index is required. Reopening the
+    database afterwards re-applies _migration_2 and backfills the index.
+    """
+    connection.execute("DROP TABLE IF EXISTS memory_terms")
+    connection.execute("PRAGMA user_version = 1")
+
+
 _MIGRATIONS: dict[int, object] = {
     1: _migration_1,
+    2: _migration_2,
 }
 
 
@@ -48,7 +88,8 @@ def run_migrations(connection: sqlite3.Connection) -> None:
     latest known version. On a fresh database (user_version = 0, no
     tables) and on a legacy database (user_version = 0, tables already
     present), the baseline migration converges both to version 1 while
-    preserving all existing rows.
+    preserving all existing rows, and the version-2 migration then adds
+    and backfills the memory_terms index.
 
     If user_version is greater than the highest migration known to this
     code, a clear error is raised and the database is refused, preventing

@@ -72,8 +72,24 @@ class NeuroCoreService:
         self._event("captured", memory, "stored")
         return memory
 
-    def retrieve(self, query: str, scope: Scope, max_results: int | None = None) -> list[dict]:
+    def retrieve(self, query: str | None = None, scope: Scope | None = None, *, project: str | None = None, agent: str | None = None, max_results: int | None = None) -> list[dict]:
         """Backward-compatible retrieve returning the ranked result list.
+
+        Two calling modes are supported:
+
+        1. Positional Scope (existing behavior, preserved):
+           ``service.retrieve(query, scope, max_results=...)``
+           returns the ranked result list.
+
+        2. Keyword arguments (new mode, added to align with the test caller
+           in ``host_lifecycle_scenarios.py`` scenario_b_on_plugin_load):
+           ``service.retrieve(query=..., project=..., agent=...)``
+           constructs a ``Scope`` internally and returns the ranked result
+           list.
+
+        The two modes are mutually exclusive: passing both a positional
+        ``scope`` and keyword ``project=`` raises ``TypeError``. Passing
+        neither raises ``TypeError``. ``query`` is required in both modes.
 
         Uses candidate_ids as a pure candidate pre-filter before domain
         scoring, then applies the result cap after scoring and sorting.
@@ -81,6 +97,23 @@ class NeuroCoreService:
         with existing callers; use retrieve_with_meta() for the full
         payload including count_exceeded and total_matches.
         """
+        if scope is not None and project is not None:
+            raise TypeError(
+                "NeuroCoreService.retrieve() received both a positional scope "
+                "and keyword project=; pass exactly one of the two modes."
+            )
+        if scope is None and project is None:
+            raise TypeError(
+                "NeuroCoreService.retrieve() requires either a positional scope "
+                "argument or keyword arguments (project=, agent=)."
+            )
+        if query is None:
+            raise TypeError(
+                "NeuroCoreService.retrieve() requires a query."
+            )
+        if scope is None:
+            # Keyword-argument mode: construct Scope internally.
+            scope = Scope(project, agent)
         return self.retrieve_with_meta(query, scope, max_results)["results"]
 
     def retrieve_with_meta(self, query: str, scope: Scope, max_results: int | None = None) -> dict:

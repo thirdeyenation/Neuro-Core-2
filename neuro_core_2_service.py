@@ -10,7 +10,64 @@ class NeuroCoreService:
         self.store = store
         self.ledger = ledger or ActivityLedger()
 
-    def capture(self, memory: Memory) -> Memory:
+    def capture(self, memory: Memory | None = None, *, text: str | None = None, project: str | None = None, agent: str | None = None, importance: float = 0.5, confidence: float = 0.5, source: str = "service") -> Memory | dict:
+        """Capture a memory into the store.
+
+        Two calling modes are supported:
+
+        1. Positional Memory object (existing behavior, preserved):
+           ``service.capture(Memory(text, source, scope, importance, confidence))``
+           returns the stored ``Memory`` object.
+
+        2. Keyword arguments (new mode, added to align with the hook caller
+           in ``on_plugin_load`` and the public tool contract):
+           ``service.capture(text=..., project=..., agent=...)``
+           constructs a ``Memory`` internally, stores it, and returns a dict
+           with ``memory_id``, ``text``, ``scope``, ``importance``,
+           ``confidence``, and ``validation`` fields — matching the shape
+           returned by ``tools/neuro_core_2_capture.py``.
+
+        The two modes are mutually exclusive: passing both a positional
+        ``Memory`` and keyword arguments raises ``TypeError``. Passing
+        neither raises ``TypeError``.
+        """
+        if memory is not None and text is not None:
+            raise TypeError(
+                "NeuroCoreService.capture() received both a positional Memory "
+                "and keyword arguments; pass exactly one of the two modes."
+            )
+        if memory is None and text is None:
+            raise TypeError(
+                "NeuroCoreService.capture() requires either a positional Memory "
+                "argument or keyword arguments (text=, project=, agent=)."
+            )
+        if memory is None:
+            # Keyword-argument mode: construct Memory, store, return dict.
+            if project is None:
+                raise TypeError(
+                    "NeuroCoreService.capture() keyword mode requires project=."
+                )
+            memory = Memory(
+                text=text,
+                source=source,
+                scope=Scope(project, agent),
+                importance=importance,
+                confidence=confidence,
+            )
+            self.store.put(memory)
+            self._event("captured", memory, "stored")
+            return {
+                "memory_id": memory.memory_id,
+                "text": memory.text,
+                "scope": {
+                    "project": memory.scope.project,
+                    "agent": memory.scope.agent,
+                },
+                "importance": memory.importance,
+                "confidence": memory.confidence,
+                "validation": memory.validation.value,
+            }
+        # Positional Memory mode: existing behavior, unchanged.
         self.store.put(memory)
         self._event("captured", memory, "stored")
         return memory

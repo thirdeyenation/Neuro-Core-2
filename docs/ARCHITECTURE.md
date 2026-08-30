@@ -102,7 +102,12 @@ following components are defined there:
 - Multi-writer, distributed, or performance concurrency guarantees.
   The only concurrency guarantee is single-writer serialization via
   `BEGIN IMMEDIATE` plus `busy_timeout`.
-- Authorization, input-size controls, or observability.
+- Input-size controls or observability. (Authorization is no longer a
+  non-goal: a minimal five-layer authorization baseline is implemented
+  per `docs/decisions/0007-authorization-policy.md`, with explicit
+  non-claims — not a security boundary, not authentication, not
+  production-grade — and the maturity limit "authorization is unproven"
+  preserved in Project Instructions §1.)
 - Benchmark or competition claims.
 
 ---

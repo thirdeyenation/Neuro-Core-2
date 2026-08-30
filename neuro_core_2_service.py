@@ -1,8 +1,30 @@
-"""Application service composing Neuro Core domain capabilities."""
+"""Application service composing Neuro Core domain capabilities.
+
+Per ADR-0007 (authorization policy), the service implements:
+- Layer 3: service-layer scope check (defense-in-depth) — returns structured
+  error dict on scope mismatch (not a hard raise).
+- Layer 4: memory-bound scope check for validate — verifies caller context
+  matches the memory's stored scope before applying lifecycle transition.
+- Layer 5: authorization audit — every authorization decision (allow or deny)
+  is appended to the activity ledger as an authorization_decided event with
+  caller context, requested scope, target memory_id, outcome, and denial reason.
+"""
 from activity_ledger import ActivityEvent, ActivityLedger
 from memory_lifecycle import ValidationState, transition
 from memory_store import MemoryStore
 from neuro_core_2 import Memory, Scope, retrieve
+
+
+class AuthorizationError(Exception):
+    """Raised when authorization fails at the tool boundary (Layer 2).
+
+    Per ADR-0007, the tool-layer scope check hard raises on scope mismatch
+    (fail closed, no silent fallback). The service-layer check (Layer 3)
+    returns a structured error dict instead, so the service can return a
+    structured response to the tool.
+    """
+
+    pass
 
 
 class NeuroCoreService:
@@ -10,7 +32,7 @@ class NeuroCoreService:
         self.store = store
         self.ledger = ledger or ActivityLedger()
 
-    def capture(self, memory: Memory | None = None, *, text: str | None = None, project: str | None = None, agent: str | None = None, importance: float = 0.5, confidence: float = 0.5, source: str = "service") -> Memory | dict:
+    def capture(self, memory: Memory | None = None, *, text: str | None = None, project: str | None = None, agent: str | None = None, importance: float = 0.5, confidence: float = 0.5, source: str = "service", caller_context: dict | None = None) -> Memory | dict:
         """Capture a memory into the store.
 
         Two calling modes are supported:
@@ -30,6 +52,11 @@ class NeuroCoreService:
         The two modes are mutually exclusive: passing both a positional
         ``Memory`` and keyword arguments raises ``TypeError``. Passing
         neither raises ``TypeError``.
+
+        caller_context (Layer 3, optional): dict with ``caller_project`` and
+        ``caller_agent``. If provided, the service re-checks scope at the
+        service boundary (defense-in-depth). On mismatch, returns a
+        structured error dict (not a hard raise).
         """
         if memory is not None and text is not None:
             raise TypeError(
@@ -41,6 +68,52 @@ class NeuroCoreService:
                 "NeuroCoreService.capture() requires either a positional Memory "
                 "argument or keyword arguments (text=, project=, agent=)."
             )
+
+        # Determine effective scope for Layer 3 check.
+        if memory is not None:
+            eff_project = memory.scope.project
+            eff_agent = memory.scope.agent
+        else:
+            eff_project = project
+            eff_agent = agent
+
+        # Layer 3: service-layer scope check (defense-in-depth).
+        # Only fires when caller_context is provided. If a tool forgot to
+        # check, or a future tool bypasses the check, the service catches it.
+        if caller_context is not None:
+            cp = caller_context.get("caller_project")
+            ca = caller_context.get("caller_agent")
+            if cp is None:
+                self._audit_authorization(
+                    caller_context, eff_project, eff_agent, None,
+                    "deny", "missing caller_project",
+                )
+                return {
+                    "error": "authorization_denied",
+                    "reason": "missing caller_project",
+                    "caller_project": cp,
+                    "caller_agent": ca,
+                    "requested_project": eff_project,
+                    "requested_agent": eff_agent,
+                }
+            if cp != eff_project or ca != eff_agent:
+                self._audit_authorization(
+                    caller_context, eff_project, eff_agent, None,
+                    "deny", "scope mismatch",
+                )
+                return {
+                    "error": "authorization_denied",
+                    "reason": "scope mismatch",
+                    "caller_project": cp,
+                    "caller_agent": ca,
+                    "requested_project": eff_project,
+                    "requested_agent": eff_agent,
+                }
+            self._audit_authorization(
+                caller_context, eff_project, eff_agent, None,
+                "allow", None,
+            )
+
         if memory is None:
             # Keyword-argument mode: construct Memory, store, return dict.
             if project is None:
@@ -72,7 +145,7 @@ class NeuroCoreService:
         self._event("captured", memory, "stored")
         return memory
 
-    def retrieve(self, query: str | None = None, scope: Scope | None = None, *, project: str | None = None, agent: str | None = None, max_results: int | None = None) -> list[dict]:
+    def retrieve(self, query: str | None = None, scope: Scope | None = None, *, project: str | None = None, agent: str | None = None, max_results: int | None = None, caller_context: dict | None = None) -> list[dict] | dict:
         """Backward-compatible retrieve returning the ranked result list.
 
         Two calling modes are supported:
@@ -96,6 +169,11 @@ class NeuroCoreService:
         Returns only the result list (no cap metadata) for compatibility
         with existing callers; use retrieve_with_meta() for the full
         payload including count_exceeded and total_matches.
+
+        caller_context (Layer 3, optional): dict with ``caller_project`` and
+        ``caller_agent``. If provided, the service re-checks scope at the
+        service boundary (defense-in-depth). On mismatch, returns a
+        structured error dict.
         """
         if scope is not None and project is not None:
             raise TypeError(
@@ -114,9 +192,13 @@ class NeuroCoreService:
         if scope is None:
             # Keyword-argument mode: construct Scope internally.
             scope = Scope(project, agent)
-        return self.retrieve_with_meta(query, scope, max_results)["results"]
+        meta = self.retrieve_with_meta(query, scope, max_results, caller_context=caller_context)
+        # If retrieve_with_meta returned an error dict, propagate it.
+        if isinstance(meta, dict) and meta.get("error"):
+            return meta
+        return meta["results"]
 
-    def retrieve_with_meta(self, query: str, scope: Scope, max_results: int | None = None) -> dict:
+    def retrieve_with_meta(self, query: str, scope: Scope, max_results: int | None = None, caller_context: dict | None = None) -> dict:
         """Retrieve with cap metadata.
 
         Returns a dict with:
@@ -131,7 +213,47 @@ class NeuroCoreService:
         function and are unchanged. The cap is applied AFTER scoring and
         sorting (top-K selection), never before. Silent truncation is
         prohibited: callers receive count_exceeded and total_matches.
+
+        caller_context (Layer 3, optional): dict with ``caller_project`` and
+        ``caller_agent``. If provided, the service re-checks scope at the
+        service boundary (defense-in-depth). On mismatch, returns a
+        structured error dict.
         """
+        # Layer 3: service-layer scope check (defense-in-depth).
+        if caller_context is not None:
+            cp = caller_context.get("caller_project")
+            ca = caller_context.get("caller_agent")
+            if cp is None:
+                self._audit_authorization(
+                    caller_context, scope.project, scope.agent, None,
+                    "deny", "missing caller_project",
+                )
+                return {
+                    "error": "authorization_denied",
+                    "reason": "missing caller_project",
+                    "caller_project": cp,
+                    "caller_agent": ca,
+                    "requested_project": scope.project,
+                    "requested_agent": scope.agent,
+                }
+            if cp != scope.project or ca != scope.agent:
+                self._audit_authorization(
+                    caller_context, scope.project, scope.agent, None,
+                    "deny", "scope mismatch",
+                )
+                return {
+                    "error": "authorization_denied",
+                    "reason": "scope mismatch",
+                    "caller_project": cp,
+                    "caller_agent": ca,
+                    "requested_project": scope.project,
+                    "requested_agent": scope.agent,
+                }
+            self._audit_authorization(
+                caller_context, scope.project, scope.agent, None,
+                "allow", None,
+            )
+
         terms = set(query.lower().split())
         candidate_ids = getattr(self.store, "candidate_ids", None)
         if callable(candidate_ids):
@@ -154,10 +276,66 @@ class NeuroCoreService:
             "total_matches": total_matches,
         }
 
-    def validate(self, memory_id: str, target: ValidationState) -> Memory:
+    def validate(self, memory_id: str, target: ValidationState, caller_context: dict | None = None) -> Memory | dict:
+        """Validate a memory's lifecycle state.
+
+        caller_context (Layer 4, optional): dict with ``caller_project`` and
+        ``caller_agent``. If provided, the service verifies that the caller
+        context matches the memory's stored scope before applying the
+        lifecycle transition (memory-bound scope check). On mismatch,
+        returns a structured error dict.
+        """
         current = self.store.get(memory_id)
         if current is None:
             raise KeyError(memory_id)
+
+        # Layer 4: memory-bound scope check for validate.
+        # Closes the prior hole where validate() accepted only memory_id
+        # with no scope check whatsoever.
+        if caller_context is not None:
+            cp = caller_context.get("caller_project")
+            ca = caller_context.get("caller_agent")
+            if cp is None:
+                self._audit_authorization(
+                    caller_context,
+                    current.scope.project, current.scope.agent,
+                    memory_id,
+                    "deny", "missing caller_project",
+                )
+                return {
+                    "error": "authorization_denied",
+                    "reason": "missing caller_project",
+                    "caller_project": cp,
+                    "caller_agent": ca,
+                    "memory_scope": {
+                        "project": current.scope.project,
+                        "agent": current.scope.agent,
+                    },
+                }
+            if cp != current.scope.project or ca != current.scope.agent:
+                self._audit_authorization(
+                    caller_context,
+                    current.scope.project, current.scope.agent,
+                    memory_id,
+                    "deny", "scope mismatch",
+                )
+                return {
+                    "error": "authorization_denied",
+                    "reason": "scope mismatch",
+                    "caller_project": cp,
+                    "caller_agent": ca,
+                    "memory_scope": {
+                        "project": current.scope.project,
+                        "agent": current.scope.agent,
+                    },
+                }
+            self._audit_authorization(
+                caller_context,
+                current.scope.project, current.scope.agent,
+                memory_id,
+                "allow", None,
+            )
+
         updated = Memory(current.text, current.source, current.scope, current.importance, current.confidence, transition(current.validation, target), current.memory_id)
         self.store.put(updated)
         self._event("validation_changed", updated, target.value)
@@ -171,6 +349,56 @@ class NeuroCoreService:
 
     def _event(self, kind: str, memory: Memory, outcome: str) -> None:
         event = ActivityEvent(kind, memory.scope, (memory.memory_id,), outcome, {"source": memory.source})
+        self.ledger.append(event)
+        append_event = getattr(self.store, "append_event", None)
+        if callable(append_event):
+            append_event(event)
+
+    def _audit_authorization(
+        self,
+        caller_context: dict,
+        requested_project: str,
+        requested_agent: str | None,
+        memory_id: str | None,
+        outcome: str,
+        denial_reason: str | None,
+    ) -> None:
+        """Append an authorization_decided event to the activity ledger (Layer 5).
+
+        Per ADR-0007, every authorization decision (allow or deny) is appended
+        to the activity ledger as an authorization_decided event with caller
+        context, requested scope, target memory_id (if any), outcome
+        (allow/deny), and denial reason (e.g., "scope mismatch", "missing
+        caller_project"). This makes authorization decisions fully
+        inspectable via the existing audit tool and is consistent with
+        ADR-0004's audit-durability principle.
+        """
+        scope = Scope(requested_project, requested_agent)
+        targets = (memory_id,) if memory_id else ("authorization",)
+        evidence: dict[str, str] = {
+            "caller_project": str(caller_context.get("caller_project", "")),
+            "caller_agent": (
+                str(caller_context.get("caller_agent", ""))
+                if caller_context.get("caller_agent") is not None
+                else ""
+            ),
+            "requested_project": str(requested_project),
+            "requested_agent": (
+                str(requested_agent) if requested_agent is not None else ""
+            ),
+            "outcome": outcome,
+        }
+        if denial_reason:
+            evidence["denial_reason"] = denial_reason
+        if memory_id:
+            evidence["memory_id"] = memory_id
+        event = ActivityEvent(
+            kind="authorization_decided",
+            scope=scope,
+            targets=targets,
+            outcome=outcome,
+            evidence=evidence,
+        )
         self.ledger.append(event)
         append_event = getattr(self.store, "append_event", None)
         if callable(append_event):

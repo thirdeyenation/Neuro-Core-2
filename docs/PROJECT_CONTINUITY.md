@@ -63,6 +63,16 @@ competition documents for detail.
   payload includes `count_exceeded: true` and `total_matches: <int>` so
   callers can distinguish truncation from exhaustion — silent truncation
   is prohibited.
+- Authorization policy: a five-layer minimal authorization model
+  (caller-context binding, tool-layer scope check, service-layer scope
+  check, memory-bound scope check for validate, authorization audit with
+  denial reason) enforces `Scope(project, agent)` isolation at the
+  tool-invocation level. Verified by unit and integration tests. This is
+  a minimal baseline with explicit non-claims (not a security boundary,
+  not authentication, not production-grade); the maturity limit
+  ("authorization is unproven") remains in Project Instructions §1. See
+  `docs/AGENT_ZERO_CONTRACT_BASELINE.md` "Authorization contract" and
+  `docs/decisions/0007-authorization-policy.md`.
 
 ---
 
@@ -114,8 +124,13 @@ competition documents for detail.
   as a tool.
 - The installer copies files but does not validate imports, discovery,
   permissions, or manifest behavior.
-- There is no authorization policy, input-size control, observability,
-  or evaluation harness.
+- There is no input-size control, observability, or evaluation harness.
+- Authorization is implemented as a minimal baseline (five-layer model per
+  ADR-0007) with explicit non-claims (not a security boundary, not
+  authentication, not production-grade) and the maturity limit ("authorization
+  is unproven") preserved in Project Instructions §1. See
+  `docs/AGENT_ZERO_CONTRACT_BASELINE.md` "Authorization contract" and
+  `docs/decisions/0007-authorization-policy.md`.
 - Lifecycle integration code is implemented, but host-level firing (real Agent Zero framework load/activate/agent_init invocation) remains unverified.
 
 ---

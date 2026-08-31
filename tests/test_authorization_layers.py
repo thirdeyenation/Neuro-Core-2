@@ -276,8 +276,25 @@ def test_layer5_audit_event_for_validate_includes_memory_id():
 
 
 # ---------------------------------------------------------------------------
-# Layer 2 tests: tool-layer scope check (hard raise)
+# Layer 2 tests: tool-layer scope check (hard raise), gated behind
+# AUTHORIZATION_ENFORCEMENT_ACTIVE (WI-2026-08-31-AUTHZ-HOTFIX).
+# Both flag states are tested: enforcement-active raises (fail closed),
+# enforcement-inactive (current default, pending redesign) proceeds.
 # ---------------------------------------------------------------------------
+
+import contextlib
+
+
+@contextlib.contextmanager
+def _enforcement(module, active: bool):
+    """Temporarily set a tool module's AUTHORIZATION_ENFORCEMENT_ACTIVE flag."""
+    original = module.AUTHORIZATION_ENFORCEMENT_ACTIVE
+    module.AUTHORIZATION_ENFORCEMENT_ACTIVE = active
+    try:
+        yield
+    finally:
+        module.AUTHORIZATION_ENFORCEMENT_ACTIVE = original
+
 
 def _make_tool_with_context(tool_cls, caller_project: str | None, caller_agent: str | None):
     """Construct a tool instance with a mock agent.context."""
@@ -292,97 +309,189 @@ def _make_tool_with_context(tool_cls, caller_project: str | None, caller_agent: 
     return tool
 
 
-def test_layer2_capture_hard_raises_on_scope_mismatch():
-    """Layer 2: capture tool hard raises AuthorizationError on scope mismatch."""
-    from tools.neuro_core_2_capture import NeuroCore2Capture
-    tool = _make_tool_with_context(NeuroCore2Capture, "projA", "agent1")
+def test_layer2_capture_enforcement_active_raises_on_scope_mismatch():
+    """Layer 2 (enforcement ACTIVE): capture hard raises on scope mismatch."""
+    from tools import neuro_core_2_capture as mod
+    tool = _make_tool_with_context(mod.NeuroCore2Capture, "projA", "agent1")
     tool.args = {"text": "hello", "project": "projB", "agent": "agent2"}
-    try:
-        tool._check_scope_or_raise(tool._derive_caller_context(), "projB", "agent2")
-        assert False, "expected AuthorizationError"
-    except AuthorizationError as e:
-        assert "scope mismatch" in str(e)
-    print("PASS: test_layer2_capture_hard_raises_on_scope_mismatch")
+    with _enforcement(mod, True):
+        try:
+            tool._check_scope_or_raise(tool._derive_caller_context(), "projB", "agent2")
+            assert False, "expected AuthorizationError"
+        except AuthorizationError as e:
+            assert "scope mismatch" in str(e)
+    print("PASS: test_layer2_capture_enforcement_active_raises_on_scope_mismatch")
 
 
-def test_layer2_capture_hard_raises_on_missing_caller_context():
-    """Layer 2: capture tool hard raises when self.agent.context is None."""
-    from tools.neuro_core_2_capture import NeuroCore2Capture
-    tool = _make_tool_with_context(NeuroCore2Capture, None, None)
+def test_layer2_capture_enforcement_active_raises_on_missing_caller_context():
+    """Layer 2 (enforcement ACTIVE): capture hard raises when context is None."""
+    from tools import neuro_core_2_capture as mod
+    tool = _make_tool_with_context(mod.NeuroCore2Capture, None, None)
     tool.args = {"text": "hello", "project": "projA", "agent": "agent1"}
-    try:
+    with _enforcement(mod, True):
+        try:
+            tool._check_scope_or_raise(tool._derive_caller_context(), "projA", "agent1")
+            assert False, "expected AuthorizationError"
+        except AuthorizationError as e:
+            assert "missing caller context" in str(e)
+    print("PASS: test_layer2_capture_enforcement_active_raises_on_missing_caller_context")
+
+
+def test_layer2_capture_enforcement_inactive_proceeds_on_missing_identity():
+    """Layer 2 (enforcement INACTIVE, hotfix default): proceeds with None/None."""
+    from tools import neuro_core_2_capture as mod
+    assert mod.AUTHORIZATION_ENFORCEMENT_ACTIVE is False
+    tool = _make_tool_with_context(mod.NeuroCore2Capture, None, None)
+    tool.args = {"text": "hello", "project": "projA", "agent": "agent1"}
+    # Should not raise despite missing caller identity.
+    tool._check_scope_or_raise(tool._derive_caller_context(), "projA", "agent1")
+    print("PASS: test_layer2_capture_enforcement_inactive_proceeds_on_missing_identity")
+
+
+def test_layer2_capture_enforcement_active_passes_on_valid_scope():
+    """Layer 2 (enforcement ACTIVE): capture passes on matching scope."""
+    from tools import neuro_core_2_capture as mod
+    tool = _make_tool_with_context(mod.NeuroCore2Capture, "projA", "agent1")
+    tool.args = {"text": "hello", "project": "projA", "agent": "agent1"}
+    with _enforcement(mod, True):
         tool._check_scope_or_raise(tool._derive_caller_context(), "projA", "agent1")
-        assert False, "expected AuthorizationError"
-    except AuthorizationError as e:
-        assert "missing caller context" in str(e)
-    print("PASS: test_layer2_capture_hard_raises_on_missing_caller_context")
+    print("PASS: test_layer2_capture_enforcement_active_passes_on_valid_scope")
 
 
-def test_layer2_capture_passes_on_valid_scope():
-    """Layer 2: capture tool passes when caller scope matches requested scope."""
-    from tools.neuro_core_2_capture import NeuroCore2Capture
-    tool = _make_tool_with_context(NeuroCore2Capture, "projA", "agent1")
-    tool.args = {"text": "hello", "project": "projA", "agent": "agent1"}
-    # Should not raise.
-    tool._check_scope_or_raise(tool._derive_caller_context(), "projA", "agent1")
-    print("PASS: test_layer2_capture_passes_on_valid_scope")
-
-
-def test_layer2_retrieve_hard_raises_on_scope_mismatch():
-    """Layer 2: retrieve tool hard raises AuthorizationError on scope mismatch."""
-    from tools.neuro_core_2_retrieve import NeuroCore2Retrieve
-    tool = _make_tool_with_context(NeuroCore2Retrieve, "projA", "agent1")
+def test_layer2_retrieve_enforcement_active_raises_on_scope_mismatch():
+    """Layer 2 (enforcement ACTIVE): retrieve hard raises on scope mismatch."""
+    from tools import neuro_core_2_retrieve as mod
+    tool = _make_tool_with_context(mod.NeuroCore2Retrieve, "projA", "agent1")
     tool.args = {"query": "hello", "project": "projB", "agent": "agent2"}
-    try:
-        tool._check_scope_or_raise(tool._derive_caller_context(), "projB", "agent2")
-        assert False, "expected AuthorizationError"
-    except AuthorizationError as e:
-        assert "scope mismatch" in str(e)
-    print("PASS: test_layer2_retrieve_hard_raises_on_scope_mismatch")
+    with _enforcement(mod, True):
+        try:
+            tool._check_scope_or_raise(tool._derive_caller_context(), "projB", "agent2")
+            assert False, "expected AuthorizationError"
+        except AuthorizationError as e:
+            assert "scope mismatch" in str(e)
+    print("PASS: test_layer2_retrieve_enforcement_active_raises_on_scope_mismatch")
 
 
-def test_layer2_retrieve_passes_on_valid_scope():
-    """Layer 2: retrieve tool passes when caller scope matches requested scope."""
-    from tools.neuro_core_2_retrieve import NeuroCore2Retrieve
-    tool = _make_tool_with_context(NeuroCore2Retrieve, "projA", "agent1")
+def test_layer2_retrieve_enforcement_inactive_proceeds_on_missing_identity():
+    """Layer 2 (enforcement INACTIVE, hotfix default): proceeds with None/None."""
+    from tools import neuro_core_2_retrieve as mod
+    assert mod.AUTHORIZATION_ENFORCEMENT_ACTIVE is False
+    tool = _make_tool_with_context(mod.NeuroCore2Retrieve, None, None)
     tool.args = {"query": "hello", "project": "projA", "agent": "agent1"}
+    # Should not raise despite missing caller identity.
     tool._check_scope_or_raise(tool._derive_caller_context(), "projA", "agent1")
-    print("PASS: test_layer2_retrieve_passes_on_valid_scope")
+    print("PASS: test_layer2_retrieve_enforcement_inactive_proceeds_on_missing_identity")
 
 
-def test_layer2_validate_hard_raises_on_missing_caller_context():
-    """Layer 2: validate tool hard raises when self.agent.context is None."""
-    from tools.neuro_core_2_validate import NeuroCore2Validate
-    tool = _make_tool_with_context(NeuroCore2Validate, None, None)
+def test_layer2_retrieve_enforcement_active_passes_on_valid_scope():
+    """Layer 2 (enforcement ACTIVE): retrieve passes on matching scope."""
+    from tools import neuro_core_2_retrieve as mod
+    tool = _make_tool_with_context(mod.NeuroCore2Retrieve, "projA", "agent1")
+    tool.args = {"query": "hello", "project": "projA", "agent": "agent1"}
+    with _enforcement(mod, True):
+        tool._check_scope_or_raise(tool._derive_caller_context(), "projA", "agent1")
+    print("PASS: test_layer2_retrieve_enforcement_active_passes_on_valid_scope")
+
+
+def test_layer2_validate_enforcement_active_raises_on_missing_caller_context():
+    """Layer 2 (enforcement ACTIVE): validate hard raises when context is None."""
+    from tools import neuro_core_2_validate as mod
+    tool = _make_tool_with_context(mod.NeuroCore2Validate, None, None)
     tool.args = {"memory_id": "abc", "target": "validated"}
-    try:
-        tool._check_caller_context_or_raise(tool._derive_caller_context())
-        assert False, "expected AuthorizationError"
-    except AuthorizationError as e:
-        assert "missing caller context" in str(e)
-    print("PASS: test_layer2_validate_hard_raises_on_missing_caller_context")
+    with _enforcement(mod, True):
+        try:
+            tool._check_caller_context_or_raise(tool._derive_caller_context())
+            assert False, "expected AuthorizationError"
+        except AuthorizationError as e:
+            assert "missing caller context" in str(e)
+    print("PASS: test_layer2_validate_enforcement_active_raises_on_missing_caller_context")
 
 
-def test_layer2_validate_hard_raises_on_missing_caller_project():
-    """Layer 2: validate tool hard raises when caller_project is None."""
-    from tools.neuro_core_2_validate import NeuroCore2Validate
-    tool = _make_tool_with_context(NeuroCore2Validate, None, "agent1")
+def test_layer2_validate_enforcement_active_raises_on_missing_caller_project():
+    """Layer 2 (enforcement ACTIVE): validate hard raises when caller_project is None."""
+    from tools import neuro_core_2_validate as mod
+    tool = _make_tool_with_context(mod.NeuroCore2Validate, None, "agent1")
     tool.args = {"memory_id": "abc", "target": "validated"}
-    try:
-        tool._check_caller_context_or_raise(tool._derive_caller_context())
-        assert False, "expected AuthorizationError"
-    except AuthorizationError as e:
-        assert "missing caller_project" in str(e)
-    print("PASS: test_layer2_validate_hard_raises_on_missing_caller_project")
+    with _enforcement(mod, True):
+        try:
+            tool._check_caller_context_or_raise(tool._derive_caller_context())
+            assert False, "expected AuthorizationError"
+        except AuthorizationError as e:
+            assert "missing caller_project" in str(e)
+    print("PASS: test_layer2_validate_enforcement_active_raises_on_missing_caller_project")
 
 
-def test_layer2_validate_passes_on_populated_caller_context():
-    """Layer 2: validate tool passes when caller context is populated."""
-    from tools.neuro_core_2_validate import NeuroCore2Validate
-    tool = _make_tool_with_context(NeuroCore2Validate, "projA", "agent1")
+def test_layer2_validate_enforcement_inactive_proceeds_on_missing_identity():
+    """Layer 2 (enforcement INACTIVE, hotfix default): proceeds with None/None."""
+    from tools import neuro_core_2_validate as mod
+    assert mod.AUTHORIZATION_ENFORCEMENT_ACTIVE is False
+    tool = _make_tool_with_context(mod.NeuroCore2Validate, None, None)
     tool.args = {"memory_id": "abc", "target": "validated"}
+    # Should not raise despite missing caller identity.
     tool._check_caller_context_or_raise(tool._derive_caller_context())
-    print("PASS: test_layer2_validate_passes_on_populated_caller_context")
+    print("PASS: test_layer2_validate_enforcement_inactive_proceeds_on_missing_identity")
+
+
+def test_layer2_validate_enforcement_active_passes_on_populated_caller_context():
+    """Layer 2 (enforcement ACTIVE): validate passes on populated caller context."""
+    from tools import neuro_core_2_validate as mod
+    tool = _make_tool_with_context(mod.NeuroCore2Validate, "projA", "agent1")
+    tool.args = {"memory_id": "abc", "target": "validated"}
+    with _enforcement(mod, True):
+        tool._check_caller_context_or_raise(tool._derive_caller_context())
+    print("PASS: test_layer2_validate_enforcement_active_passes_on_populated_caller_context")
+
+
+# ---------------------------------------------------------------------------
+# P0 hotfix (WI-2026-08-31-AUTHZ-HOTFIX): caller_context forwarding gate
+# ---------------------------------------------------------------------------
+
+def test_layer2_capture_inactive_omits_caller_context_for_service():
+    """Hotfix: with enforcement inactive, capture forwards caller_context=None."""
+    from tools import neuro_core_2_capture as mod
+    tool = _make_tool_with_context(mod.NeuroCore2Capture, None, None)
+    assert tool._effective_caller_context({"caller_project": None, "caller_agent": None}) is None
+
+
+def test_layer2_capture_active_forwards_caller_context():
+    """Hotfix: with enforcement active, capture forwards caller_context unchanged."""
+    from tools import neuro_core_2_capture as mod
+    tool = _make_tool_with_context(mod.NeuroCore2Capture, "projA", "agent1")
+    ctx = {"caller_project": "projA", "caller_agent": "agent1"}
+    with _enforcement(mod, True):
+        assert tool._effective_caller_context(ctx) is ctx
+
+
+def test_layer2_retrieve_inactive_omits_caller_context_for_service():
+    """Hotfix: with enforcement inactive, retrieve forwards caller_context=None."""
+    from tools import neuro_core_2_retrieve as mod
+    tool = _make_tool_with_context(mod.NeuroCore2Retrieve, None, None)
+    assert tool._effective_caller_context({"caller_project": None, "caller_agent": None}) is None
+
+
+def test_layer2_retrieve_active_forwards_caller_context():
+    """Hotfix: with enforcement active, retrieve forwards caller_context unchanged."""
+    from tools import neuro_core_2_retrieve as mod
+    tool = _make_tool_with_context(mod.NeuroCore2Retrieve, "projA", "agent1")
+    ctx = {"caller_project": "projA", "caller_agent": "agent1"}
+    with _enforcement(mod, True):
+        assert tool._effective_caller_context(ctx) is ctx
+
+
+def test_layer2_validate_inactive_omits_caller_context_for_service():
+    """Hotfix: with enforcement inactive, validate forwards caller_context=None."""
+    from tools import neuro_core_2_validate as mod
+    tool = _make_tool_with_context(mod.NeuroCore2Validate, None, None)
+    assert tool._effective_caller_context({"caller_project": None, "caller_agent": None}) is None
+
+
+def test_layer2_validate_active_forwards_caller_context():
+    """Hotfix: with enforcement active, validate forwards caller_context unchanged."""
+    from tools import neuro_core_2_validate as mod
+    tool = _make_tool_with_context(mod.NeuroCore2Validate, "projA", "agent1")
+    ctx = {"caller_project": "projA", "caller_agent": "agent1"}
+    with _enforcement(mod, True):
+        assert tool._effective_caller_context(ctx) is ctx
 
 
 # ---------------------------------------------------------------------------
@@ -442,15 +551,24 @@ def main():
         test_layer5_audit_event_on_deny_includes_reason,
         test_layer5_audit_event_on_missing_caller_project,
         test_layer5_audit_event_for_validate_includes_memory_id,
-        # Layer 2
-        test_layer2_capture_hard_raises_on_scope_mismatch,
-        test_layer2_capture_hard_raises_on_missing_caller_context,
-        test_layer2_capture_passes_on_valid_scope,
-        test_layer2_retrieve_hard_raises_on_scope_mismatch,
-        test_layer2_retrieve_passes_on_valid_scope,
-        test_layer2_validate_hard_raises_on_missing_caller_context,
-        test_layer2_validate_hard_raises_on_missing_caller_project,
-        test_layer2_validate_passes_on_populated_caller_context,
+        # Layer 2 (gated behind AUTHORIZATION_ENFORCEMENT_ACTIVE — both states tested)
+        test_layer2_capture_enforcement_active_raises_on_scope_mismatch,
+        test_layer2_capture_enforcement_active_raises_on_missing_caller_context,
+        test_layer2_capture_enforcement_inactive_proceeds_on_missing_identity,
+        test_layer2_capture_enforcement_active_passes_on_valid_scope,
+        test_layer2_retrieve_enforcement_active_raises_on_scope_mismatch,
+        test_layer2_retrieve_enforcement_inactive_proceeds_on_missing_identity,
+        test_layer2_retrieve_enforcement_active_passes_on_valid_scope,
+        test_layer2_validate_enforcement_active_raises_on_missing_caller_context,
+        test_layer2_validate_enforcement_active_raises_on_missing_caller_project,
+        test_layer2_validate_enforcement_inactive_proceeds_on_missing_identity,
+        test_layer2_validate_enforcement_active_passes_on_populated_caller_context,
+        test_layer2_capture_inactive_omits_caller_context_for_service,
+        test_layer2_capture_active_forwards_caller_context,
+        test_layer2_retrieve_inactive_omits_caller_context_for_service,
+        test_layer2_retrieve_active_forwards_caller_context,
+        test_layer2_validate_inactive_omits_caller_context_for_service,
+        test_layer2_validate_active_forwards_caller_context,
         # Backward compat
         test_backward_compat_capture_without_caller_context,
         test_backward_compat_retrieve_without_caller_context,

@@ -16,6 +16,7 @@ from self.agent.context and passes it to the service, which performs
 Layer 4 (memory-bound scope check) — verifying that the caller context
 matches the memory's stored scope before applying the lifecycle transition.
 """
+import logging
 import sys
 from pathlib import Path
 
@@ -29,6 +30,16 @@ from memory_lifecycle import ValidationState
 from neuro_core_2_service import AuthorizationError, NeuroCoreService
 from sqlite_store import SQLiteStore
 from tools._config import load_config
+
+# P0 hotfix (WI-2026-08-31-AUTHZ-HOTFIX): Layer 2 authorization enforcement
+# is INACTIVE pending redesign (WI-2026-08-31-AUTHORIZATION-POLICY-REDESIGN).
+# Empirical finding (VAL blast-radius, 2026-08-31): the host never populates
+# agent.context.caller_project/caller_agent, so Layer 2 failed closed on 100%
+# of legitimate real-host dispatches. All Layer 2 code below remains intact;
+# re-enabling enforcement is a one-line change (set this flag to True).
+AUTHORIZATION_ENFORCEMENT_ACTIVE = False
+
+logger = logging.getLogger(__name__)
 
 
 class NeuroCore2Validate(Tool):
@@ -53,6 +64,11 @@ class NeuroCore2Validate(Tool):
         # verifies that caller context exists and is populated; the
         # service performs the memory-bound scope check (Layer 4).
         self._check_caller_context_or_raise(caller_context)
+
+        # P0 hotfix: when enforcement is inactive, omit caller_context so
+        # the service uses its backward-compatible path (Layers 3-5
+        # untouched). Re-enabling the flag restores full forwarding.
+        caller_context = self._effective_caller_context(caller_context)
 
         db_path = load_config()["database_path"]
         store = SQLiteStore(db_path)
@@ -81,6 +97,18 @@ class NeuroCore2Validate(Tool):
             },
         )
 
+    def _effective_caller_context(self, caller_context: dict | None) -> dict | None:
+        """Return the caller_context to forward to the service.
+
+        P0 hotfix (WI-2026-08-31-AUTHZ-HOTFIX): when enforcement is
+        inactive, return None so the service uses its documented
+        backward-compatible path (no caller-context check). When
+        enforcement is active, forward caller_context unchanged.
+        """
+        if not AUTHORIZATION_ENFORCEMENT_ACTIVE:
+            return None
+        return caller_context
+
     def _derive_caller_context(self) -> dict | None:
         """Derive caller identity from self.agent.context (Layer 1)."""
         agent = getattr(self, "agent", None)
@@ -102,6 +130,15 @@ class NeuroCore2Validate(Tool):
         caller context exists and caller_project is populated; the
         service performs the memory-bound scope check (Layer 4).
         """
+        # P0 hotfix (WI-2026-08-31-AUTHZ-HOTFIX): Layer 2 enforcement is
+        # gated behind AUTHORIZATION_ENFORCEMENT_ACTIVE. When inactive,
+        # proceed with caller_context as-is (None/None) and log a warning.
+        if not AUTHORIZATION_ENFORCEMENT_ACTIVE:
+            logger.warning(
+                "authorization enforcement inactive pending redesign — see "
+                "WI-2026-08-31-AUTHORIZATION-POLICY-REDESIGN"
+            )
+            return
         if caller_context is None:
             raise AuthorizationError(
                 "Authorization denied: missing caller context (self.agent.context not populated)"

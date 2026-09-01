@@ -24,6 +24,7 @@ from neuro_core_2 import Memory, Scope
 from neuro_core_2_service import AuthorizationError, NeuroCoreService
 from sqlite_store import SQLiteStore
 from tools._config import load_config
+from caller_identity import derive_caller_identity, scope_binding_denial
 
 # P0 hotfix (WI-2026-08-31-AUTHZ-HOTFIX): Layer 2 authorization enforcement
 # is INACTIVE pending redesign (WI-2026-08-31-AUTHORIZATION-POLICY-REDESIGN).
@@ -31,7 +32,7 @@ from tools._config import load_config
 # agent.context.caller_project/caller_agent, so Layer 2 failed closed on 100%
 # of legitimate real-host dispatches. All Layer 2 code below remains intact;
 # re-enabling enforcement is a one-line change (set this flag to True).
-AUTHORIZATION_ENFORCEMENT_ACTIVE = False
+AUTHORIZATION_ENFORCEMENT_ACTIVE = True
 
 logger = logging.getLogger(__name__)
 
@@ -51,16 +52,29 @@ class NeuroCore2Capture(Tool):
         importance = float(self.args.get("importance", 0.5))
         confidence = float(self.args.get("confidence", 0.5))
 
-        # Layer 1: caller-context binding from self.agent.context.
-        caller_context = self._derive_caller_context()
+        # Layer 1 (revised, WI-2026-08-31-AUTHORIZATION-POLICY-REDESIGN):
+        # derive caller identity from host inputs that verifiably exist at
+        # dispatch time (active project via helpers.projects, audited
+        # default_scope fallback with identity_source marker, host-assigned
+        # agent_name as a scope-BINDING factor — not authenticated identity).
+        identity = self._derive_caller_identity()
 
-        # Layer 2: tool-layer scope check (hard raise on mismatch).
-        self._check_scope_or_raise(caller_context, project, agent)
+        # Layer 2 (re-based): bind the requested Scope(project, agent) against
+        # the derived identity tuple (caller_project, agent_factor) with the
+        # contract's 'agent:None' sentinel semantics. Gated behind
+        # AUTHORIZATION_ENFORCEMENT_ACTIVE: when inactive, behavior is
+        # unchanged (warning log, no enforcement).
+        denial = self._binding_denial_or_none(identity, project, agent)
+        if denial is not None:
+            self._record_denial_event(identity, project, agent, denial)
+            raise AuthorizationError(f"Authorization denied: {denial}")
 
-        # P0 hotfix: when enforcement is inactive, omit caller_context so
-        # the service uses its backward-compatible path (Layers 3-5
-        # untouched). Re-enabling the flag restores full forwarding.
-        caller_context = self._effective_caller_context(caller_context)
+        # P0 hotfix gate: when enforcement is inactive, forward no
+        # caller_context so the service uses its backward-compatible path.
+        # When active, forward the derived identity so the service re-binds
+        # against the identity tuple (defense-in-depth) and records
+        # identity_source in the authorization event.
+        caller_context = self._effective_caller_context(dict(identity))
 
         db_path = load_config()["database_path"]
         store = SQLiteStore(db_path)
@@ -89,6 +103,59 @@ class NeuroCore2Capture(Tool):
                 "validation": memory.validation.value,
             },
         )
+
+    def _derive_caller_identity(self) -> dict:
+        """Layer 1 (revised): derive caller identity from host inputs.
+
+        Uses caller_identity.derive_caller_identity: active project via
+        helpers.projects.get_context_project_name, audited default_scope
+        fallback with identity_source marker, host-assigned agent_name and
+        agent.config.profile as scope-BINDING factors (not authenticated
+        caller identity).
+        """
+        agent = getattr(self, "agent", None)
+        config = load_config()
+        default_scope = config.get("default_scope", {}) or {}
+        return derive_caller_identity(
+            agent,
+            default_scope_project=default_scope.get("project", "default"),
+        )
+
+    def _binding_denial_or_none(
+        self,
+        identity: dict,
+        project: str | None,
+        agent: str | None,
+    ) -> str | None:
+        """Layer 2 (re-based): bind requested scope against derived identity.
+
+        Returns a denial reason when the binding fails, or None when the
+        binding succeeds or enforcement is inactive (flag False: behavior
+        unchanged, warning logged — no enforcement).
+        """
+        if not AUTHORIZATION_ENFORCEMENT_ACTIVE:
+            logger.warning(
+                "authorization enforcement inactive pending redesign — see "
+                "WI-2026-08-31-AUTHORIZATION-POLICY-REDESIGN"
+            )
+            return None
+        return scope_binding_denial(identity, project, agent)
+
+    def _record_denial_event(
+        self,
+        identity: dict,
+        project: str | None,
+        agent: str | None,
+        denial_reason: str,
+    ) -> None:
+        """Record an audited tool-layer denial event (ARC conditions 1 and 7)."""
+        try:
+            db_path = load_config()["database_path"]
+            store = SQLiteStore(db_path)
+            service = NeuroCoreService(store)
+            service.record_tool_layer_denial(identity, project, agent, denial_reason)
+        except Exception:
+            logger.exception("failed to record tool-layer authorization denial event")
 
     def _effective_caller_context(self, caller_context: dict | None) -> dict | None:
         """Return the caller_context to forward to the service.

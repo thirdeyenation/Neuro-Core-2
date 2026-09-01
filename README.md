@@ -63,16 +63,46 @@ validation tools backed by SQLite, with explicit memory lifecycle and audit.
   payload includes `count_exceeded: true` and `total_matches: <int>` so
   callers can distinguish truncation from exhaustion — silent truncation
   is prohibited.
-- Authorization policy: a five-layer minimal authorization model
-  (caller-context binding, tool-layer scope check, service-layer scope
-  check, memory-bound scope check for validate, authorization audit with
-  denial reason) enforces `Scope(project, agent)` isolation at the
-  tool-invocation level. Verified by unit and integration tests. This is
-  a minimal baseline with explicit non-claims (not a security boundary,
-  not authentication, not production-grade); the maturity limit
+> **Current state (2026-09-01):** the redesigned authorization mechanism
+> is **implemented** in the plugin and covered by the test suite.
+> Enforcement is **ACTIVE** — `AUTHORIZATION_ENFORCEMENT_ACTIVE` is
+> `True` in all three tools (capture.py:35, retrieve.py:35,
+> validate.py:41). Host-level flag-enabled behavior has been **validated
+> by VAL** (validation-report.yaml rev 1, decision: pass,
+> required_level: host; 5/5 ARC Condition 5 scenarios on the real
+> dispatch path; raw probe evidence under
+> `.a0proj/notepad_temp/val/20260901T0910-AUTHZ-REENABLE-VALIDATION/`).
+> The earlier integration-level pass (10/10 scenarios) is retained as
+> historical context. Binding is not authentication; authorization
+> remains unproven as a security mechanism, and authorization-event
+> evidence (`identity_source`, `denial_reason`) lives on the in-memory
+> ActivityLedger and is not durably persisted across restart
+> (ADR-0004/ADR-0006).
+
+- Authorization policy: a derivation-based authorization model
+  (operator-optional Layer 0 `_tool_access` gating, plugin-side identity
+  derivation from host inputs that exist at dispatch, scope binding with
+  the `agent:None` sentinel, audited fallback with the `identity_source`
+  marker, service-layer scope check, authorization audit with denial
+  reason) is implemented to enforce `Scope(project, agent)` isolation at
+  the tool-invocation level; enforcement is ACTIVE
+  (`AUTHORIZATION_ENFORCEMENT_ACTIVE = True` in all three tools).
+  Integration-level behavior was validated on the real host dispatch
+  path (VAL pass, 10/10 scenarios, retained as historical context), and
+  host-level flag-enabled effectiveness is now validated by VAL
+  (validation-report.yaml rev 1, decision: pass, required_level: host,
+  5/5 ARC Condition 5 scenarios on the real dispatch path). Binding is
+  not authentication: `agent_name` and `profile` are host-controlled
+  binding factors, not credentials. This is a minimal baseline with
+  explicit non-claims (not a security boundary, not caller
+  authentication, not production-grade); authorization-event evidence
+  (`identity_source`, `denial_reason`) is recorded on the in-memory
+  ActivityLedger and is not durably persisted across restart
+  (ADR-0004/ADR-0006); the maturity limit
   ("authorization is unproven") remains in Project Instructions §1. See
   `docs/AGENT_ZERO_CONTRACT_BASELINE.md` "Authorization contract" and
-  `docs/decisions/0007-authorization-policy.md`.
+  `docs/decisions/0008-authorization-policy.md` (ADR-0008, superseding
+  ADR-0007 in full).
 
 ---
 
@@ -112,12 +142,24 @@ validation tools backed by SQLite, with explicit memory lifecycle and audit.
 - The installer copies files but does not validate imports, discovery,
   permissions, or manifest behavior.
 - There is no input-size control, observability, or evaluation harness.
-- Authorization is implemented as a minimal baseline (five-layer model per
-  ADR-0007) with explicit non-claims (not a security boundary, not
-  authentication, not production-grade) and the maturity limit ("authorization
-  is unproven") preserved in Project Instructions §1. See
-  `docs/AGENT_ZERO_CONTRACT_BASELINE.md` "Authorization contract" and
-  `docs/decisions/0007-authorization-policy.md`.
+- Authorization is implemented as a minimal baseline (derivation-based
+  model per ADR-0008, superseding ADR-0007 in full) with explicit
+  non-claims (not a security boundary, not caller authentication, not
+  production-grade) and the maturity limit ("authorization is unproven")
+  preserved in Project Instructions §1. Integration-level validation has
+  passed (VAL, 10/10 scenarios, retained as historical context);
+  enforcement is now ACTIVE (`AUTHORIZATION_ENFORCEMENT_ACTIVE = True`
+  in all three tools), and host-level flag-enabled behavior is validated
+  by VAL (validation-report.yaml rev 1, decision: pass,
+  required_level: host, 5/5 ARC Condition 5 scenarios on the real
+  dispatch path). Authorization-event evidence remains in-memory only
+  (ActivityLedger; not persisted across restart, ADR-0004/ADR-0006).
+  The declared-name dispatch
+  mismatch (`NeuroCore2Capture`/`NeuroCore2Retrieve`/`NeuroCore2Validate`
+  are not resolvable via filename-based host dispatch; tools are
+  reachable only under their snake_case names) is a known constraint.
+  See `docs/AGENT_ZERO_CONTRACT_BASELINE.md` "Authorization contract"
+  and `docs/decisions/0008-authorization-policy.md`.
 - Lifecycle integration code is implemented, but host-level firing (real Agent Zero framework load/activate/agent_init invocation) remains unverified.
 
 ---

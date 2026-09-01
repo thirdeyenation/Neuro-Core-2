@@ -32,6 +32,66 @@ class NeuroCoreService:
         self.store = store
         self.ledger = ledger or ActivityLedger()
 
+    def _identity_binding_denial(
+        self,
+        caller_context: dict,
+        requested_project: str | None,
+        requested_agent: str | None,
+    ) -> str | None:
+        """Bind a requested scope against a derived caller identity tuple.
+
+        Used when caller_context carries an identity_source marker (the revised
+        Layer 1 derivation from caller_identity.derive_caller_identity). The
+        requested Scope(project, agent) must match the derived identity tuple
+        (caller_project, agent_factor) per the implementation contract's
+        sentinel semantics; returns a denial reason or None on success.
+        """
+        from caller_identity import scope_binding_denial
+
+        return scope_binding_denial(caller_context, requested_project, requested_agent)
+
+    def record_tool_layer_denial(
+        self,
+        identity: dict,
+        requested_project: str | None,
+        requested_agent: str | None,
+        denial_reason: str,
+        memory_id: str | None = None,
+    ) -> None:
+        """Record a tool-layer (Layer 2) authorization denial as an audited event.
+
+        Called by the tools when the Layer 2 binding denies a request so the
+        denial is inspectable in the activity ledger. Records scope values
+        (project, agent factor, identity_source) and the denial reason only —
+        never credentials, secrets, or identity material beyond project name,
+        agent_name, and profile (ARC condition 7).
+        """
+        evidence: dict[str, str] = {
+            "caller_project": str(identity.get("caller_project", "")),
+            "agent_factor": str(identity.get("agent_factor", "") or ""),
+            "identity_source": str(identity.get("identity_source", "")),
+            "requested_project": str(requested_project),
+            "requested_agent": (
+                str(requested_agent) if requested_agent is not None else ""
+            ),
+            "outcome": "deny",
+            "denial_reason": denial_reason,
+            "layer": "tool-layer",
+        }
+        if memory_id:
+            evidence["memory_id"] = memory_id
+        event = ActivityEvent(
+            kind="authorization_decided",
+            scope=Scope(requested_project, requested_agent),
+            targets=(memory_id,) if memory_id else ("authorization",),
+            outcome="deny",
+            evidence=evidence,
+        )
+        self.ledger.append(event)
+        append_event = getattr(self.store, "append_event", None)
+        if callable(append_event):
+            append_event(event)
+
     def capture(self, memory: Memory | None = None, *, text: str | None = None, project: str | None = None, agent: str | None = None, importance: float = 0.5, confidence: float = 0.5, source: str = "service", caller_context: dict | None = None) -> Memory | dict:
         """Capture a memory into the store.
 
@@ -80,7 +140,29 @@ class NeuroCoreService:
         # Layer 3: service-layer scope check (defense-in-depth).
         # Only fires when caller_context is provided. If a tool forgot to
         # check, or a future tool bypasses the check, the service catches it.
-        if caller_context is not None:
+        if caller_context is not None and "identity_source" in caller_context:
+            # Revised binding (WI-2026-08-31-AUTHORIZATION-POLICY-REDESIGN):
+            # bind the requested scope against the derived identity tuple
+            # (caller_project, agent_factor) with sentinel semantics.
+            denial = self._identity_binding_denial(caller_context, eff_project, eff_agent)
+            if denial is not None:
+                self._audit_authorization(
+                    caller_context, eff_project, eff_agent, None,
+                    "deny", denial,
+                )
+                return {
+                    "error": "authorization_denied",
+                    "reason": denial,
+                    "caller_project": caller_context.get("caller_project"),
+                    "caller_agent": caller_context.get("caller_agent"),
+                    "requested_project": eff_project,
+                    "requested_agent": eff_agent,
+                }
+            self._audit_authorization(
+                caller_context, eff_project, eff_agent, None,
+                "allow", None,
+            )
+        elif caller_context is not None:
             cp = caller_context.get("caller_project")
             ca = caller_context.get("caller_agent")
             if cp is None:
@@ -220,7 +302,29 @@ class NeuroCoreService:
         structured error dict.
         """
         # Layer 3: service-layer scope check (defense-in-depth).
-        if caller_context is not None:
+        if caller_context is not None and "identity_source" in caller_context:
+            # Revised binding (WI-2026-08-31-AUTHORIZATION-POLICY-REDESIGN):
+            # bind the requested scope against the derived identity tuple
+            # (caller_project, agent_factor) with sentinel semantics.
+            denial = self._identity_binding_denial(caller_context, scope.project, scope.agent)
+            if denial is not None:
+                self._audit_authorization(
+                    caller_context, scope.project, scope.agent, None,
+                    "deny", denial,
+                )
+                return {
+                    "error": "authorization_denied",
+                    "reason": denial,
+                    "caller_project": caller_context.get("caller_project"),
+                    "caller_agent": caller_context.get("caller_agent"),
+                    "requested_project": scope.project,
+                    "requested_agent": scope.agent,
+                }
+            self._audit_authorization(
+                caller_context, scope.project, scope.agent, None,
+                "allow", None,
+            )
+        elif caller_context is not None:
             cp = caller_context.get("caller_project")
             ca = caller_context.get("caller_agent")
             if cp is None:
@@ -292,7 +396,37 @@ class NeuroCoreService:
         # Layer 4: memory-bound scope check for validate.
         # Closes the prior hole where validate() accepted only memory_id
         # with no scope check whatsoever.
-        if caller_context is not None:
+        if caller_context is not None and "identity_source" in caller_context:
+            # Revised binding (WI-2026-08-31-AUTHORIZATION-POLICY-REDESIGN):
+            # bind the memory's stored scope against the derived identity
+            # tuple (caller_project, agent_factor) with sentinel semantics.
+            denial = self._identity_binding_denial(
+                caller_context, current.scope.project, current.scope.agent,
+            )
+            if denial is not None:
+                self._audit_authorization(
+                    caller_context,
+                    current.scope.project, current.scope.agent,
+                    memory_id,
+                    "deny", denial,
+                )
+                return {
+                    "error": "authorization_denied",
+                    "reason": denial,
+                    "caller_project": caller_context.get("caller_project"),
+                    "caller_agent": caller_context.get("caller_agent"),
+                    "memory_scope": {
+                        "project": current.scope.project,
+                        "agent": current.scope.agent,
+                    },
+                }
+            self._audit_authorization(
+                caller_context,
+                current.scope.project, current.scope.agent,
+                memory_id,
+                "allow", None,
+            )
+        elif caller_context is not None:
             cp = caller_context.get("caller_project")
             ca = caller_context.get("caller_agent")
             if cp is None:
@@ -388,6 +522,19 @@ class NeuroCoreService:
             ),
             "outcome": outcome,
         }
+        # Revised identity model (WI-2026-08-31-AUTHORIZATION-POLICY-REDESIGN,
+        # ARC condition 1): record the identity_source marker and the bound
+        # agent factor so fallback-derived identity and sentinel-bound
+        # decisions are distinguishable in the audit trail. Scope values and
+        # denial reasons only — no credentials, secrets, or identity material
+        # beyond project name, agent_name, and profile (ARC condition 7).
+        if "identity_source" in caller_context:
+            evidence["identity_source"] = str(
+                caller_context.get("identity_source", "")
+            )
+            evidence["agent_factor"] = str(
+                caller_context.get("agent_factor", "") or ""
+            )
         if denial_reason:
             evidence["denial_reason"] = denial_reason
         if memory_id:

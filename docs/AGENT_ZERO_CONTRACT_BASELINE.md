@@ -59,61 +59,118 @@ The runtime plugin source lives at `/a0/usr/plugins/neuro_core_2/`:
 ## Authorization contract
 
 Neuro Core 2 enforces `Scope(project, agent)` isolation at the
-tool-invocation level through a **five-layer minimal authorization
+tool-invocation level through a **derivation-based authorization
 model**. This section is the authoritative newcomer-facing description
 of that contract; the durable policy record is
-`docs/decisions/0007-authorization-policy.md` (ADR-0007).
+`docs/decisions/0008-authorization-policy.md` (ADR-0008), which
+supersedes ADR-0007 in full.
 
-### Five-layer model
+> **Current state (2026-09-01):** the redesigned mechanism is
+> **implemented** in the plugin and covered by the test suite.
+> Enforcement is **ACTIVE** — `AUTHORIZATION_ENFORCEMENT_ACTIVE` is
+> `True` in all three tools (capture.py:35, retrieve.py:35,
+> validate.py:41). Host-level flag-enabled behavior on the real host
+> dispatch path (real `AgentConfig` → `AgentContext` → `ctx.agent0` →
+> `agent.get_tool`) has been **validated by VAL**
+> (validation-report.yaml rev 1, decision: pass, required_level: host;
+> 5/5 ARC Condition 5 scenarios; raw probe evidence under
+> `.a0proj/notepad_temp/val/20260901T0910-AUTHZ-REENABLE-VALIDATION/`).
+> The earlier integration-level pass (10/10 scenarios) is retained as
+> historical context. Binding is not authentication; authorization
+> remains unproven as a security mechanism, and authorization-event
+> evidence (`identity_source`, `denial_reason`) lives on the in-memory
+> ActivityLedger and is not durably persisted across restart
+> (ADR-0004/ADR-0006).
+
+### Why the model changed
+
+The prior model (ADR-0007) relied on a host contract: the host would
+populate `agent.context.caller_project`/`caller_agent`. Empirical
+verification proved the host never populates caller identity, producing
+a fail-closed non-functional state (3 of 3 tools denying 100% of real
+dispatches). ADR-0008 inverts the premise: caller identity is derived
+**plugin-side from host inputs that verifiably exist at dispatch time**.
+
+### Derivation-based model
 
 | Layer | Where | What it does |
 |---|---|---|
-| **1. Caller-context binding** | Host contract | Tools derive caller identity from the Agent Zero tool instance — `self.agent` and `self.agent.context` — rather than from a pre-packaged `caller_context` parameter. The host is the single source of truth for "who is calling." |
-| **2. Tool-layer scope check** | Tool boundary | Each tool compares `self.agent.context.caller_project` and `self.agent.context.caller_agent` against the `project` / `agent` arguments supplied to the tool. On mismatch, the tool **hard raises an exception** (fail closed, no silent fallback) and does not invoke the service. |
-| **3. Service-layer scope check** | Service boundary | `NeuroCoreService.capture()`, `retrieve()`, and `validate()` accept a caller-context parameter and re-check scope at the service boundary. Defense-in-depth: catches any tool that forgot to check, and any future tool that bypasses the check. Returns a **structured error dict** (not a hard raise) so the service can return a structured response to the tool. |
-| **4. Memory-bound scope check for validate** | Service boundary (validate only) | `NeuroCoreService.validate()` looks up the memory by `memory_id`, then verifies that the caller context matches the memory's stored scope before applying the lifecycle transition. Closes the prior hole where `validate()` accepted only `memory_id` with no scope check. |
-| **5. Authorization audit** | Activity ledger | Every authorization decision (allow or deny) is appended to the activity ledger as an `authorization_decided` event with caller context, requested scope, target `memory_id` (if any), outcome (allow/deny), and **denial reason** (e.g., "scope mismatch", "missing caller context"). Makes authorization decisions fully inspectable via the existing audit tool. |
+| **0. Operator-optional `_tool_access` gating** | Host policy substrate | Reuses `helpers/tool_policy.py` via the existing `_tool_access` extension. **Operator-optional and additive** — no default policy ships. Canonical policy IDs bind to the dispatchable snake_case tool names (see table below). |
+| **1. Plugin-side identity derivation** | Tool boundary | The plugin derives caller identity from host inputs that exist at dispatch: `caller_project` from `helpers.projects.get_context_project_name(agent.context)` (the same input `helpers/tool_policy.py` consumes), `agent_name` from `self.agent.agent_name` (host-assigned), `profile` from `agent.config.profile`. Implemented in `plugins/neuro_core_2/caller_identity.py`. |
+| **2. Scope binding** | Tool boundary | The requested `Scope(project, agent)` must **match** the derived identity tuple `(caller_project, agent_factor)`; a caller-supplied scope value can only match the derived value, never define it. On mismatch the tool raises `AuthorizationError` (fail closed) and a denial event is audited. A None/unmapped agent factor binds as the distinct sentinel `agent:None`, derived from the absence of a host-provided agent mapping — never from caller input — so it creates no unenforced path. |
+| **3. Service-layer scope check** | Service boundary | `NeuroCoreService.capture()`, `retrieve()`, and `validate()` re-check scope at the service boundary using the derived caller identity. Returns a structured error dict so the tool can surface the denial reason. |
+| **4. Authorization audit** | Activity ledger | Every authorization decision (allow or deny) is appended as an `authorization_decided` event with derived scope values, the `identity_source` marker, requested scope, target `memory_id` (if any), outcome, and **denial reason**. Denial events record scope values and denial reasons only — no credentials, secrets, or identity material beyond project name, `agent_name`, and profile. |
 
-### Breaking-additive contract change
+### Audited fallback with `identity_source`
 
-The authorization model introduces a **breaking-additive** change to
-the public tool contract:
+When no active project is set on the context, `caller_project` falls back
+to the plugin's configured `default_scope.project` (operator-controlled
+configuration, never caller-supplied). Every authorization decision
+records `identity_source` as exactly one of `active-project` or
+`default-scope-fallback`, written into the activity-ledger event so
+fallback-derived identity is distinguishable in the audit trail. Under
+fallback identity, `neuro_core_2_validate`'s target-scope derivation
+never widens beyond the configured default scope.
 
-- **Before:** Tools were invoked with explicit `project` and optional
-  `agent` scope arguments, and the service trusted whatever scope was
-  passed.
-- **After:** Tools additionally require a populated
-  `self.agent` / `self.agent.context` from the Agent Zero host. Caller
-  identity is derived from `self.agent.context.caller_project` and
-  `self.agent.context.caller_agent`.
+### Binding, not authentication
 
-**Failure mode:** Existing callers that do not supply a populated
-`self.agent.context` will fail closed (authorization error). Silent
-fallback to "trust the caller" is explicitly prohibited — it would
-re-introduce the gap this contract closes.
+`agent_name` and `profile` are **host-controlled scope-binding factors**,
+not authenticated caller identity. They are sufficient for scope binding
+(the requested scope must match host-derived identity or the call is
+denied and audited) and insufficient for caller authentication. No
+caller-authentication, adversarial-bypass-resistance, or
+security-assurance claim is made or permitted.
 
-**Migration:** Callers must ensure the Agent Zero host populates
-`self.agent` / `self.agent.context` with the authenticated caller's
-identity before invoking any Neuro Core 2 tool. This is the host's
-responsibility; Neuro Core 2 verifies the host's claim.
+### Tool names and Layer 0 policy IDs
+
+The declared tool names (`NeuroCore2Capture`, `NeuroCore2Retrieve`,
+`NeuroCore2Validate`) are not resolvable through the host's
+filename-based dispatch (known constraint). Tools are reachable only
+under their dispatchable snake_case names, and authorization binds those
+names. Canonical `_tool_access` policy IDs (operator-optional; no
+default policy ships) bind to the dispatchable names:
+
+| Canonical policy ID | Dispatchable tool name |
+|---|---|
+| `plugin:neuro_core_2:neuro_core_2_capture` | `neuro_core_2_capture` |
+| `plugin:neuro_core_2:neuro_core_2_retrieve` | `neuro_core_2_retrieve` |
+| `plugin:neuro_core_2:neuro_core_2_validate` | `neuro_core_2_validate` |
+
+### Enforcement flag and rollback
+
+`AUTHORIZATION_ENFORCEMENT_ACTIVE` is `True` in all three tools
+(capture.py:35, retrieve.py:35, validate.py:41). Enforcement is active
+on the real dispatch path. Setting the flag to `False` remains the
+one-flag rollback: tools then behave exactly as in the P0 hotfix state —
+functional, with zero authorization enforcement. The staged re-enable
+condition is satisfied and completed: VAL passed integration-level
+validation (validation-report.yaml rev 1, 10/10 scenarios, retained as
+historical context), and after the ORC-authorized re-enable sub-step,
+VAL passed host-level flag-enabled validation (validation-report.yaml
+rev 1, decision: pass, required_level: host, 5/5 ARC Condition 5
+scenarios on the real dispatch path).
 
 ### Error shape
 
 | Layer | Error shape | Rationale |
 |---|---|---|
-| Layer 2 (tool-layer) | **Hard raise** (exception) | Prevents any caller from accidentally proceeding past a denial. Fail closed, no silent fallback. |
-| Layer 3 (service-layer) | **Structured error dict** | Allows the service to return a structured response to the tool, which can then surface the denial reason to the caller. |
+| Layer 2 (tool-layer) | **Hard raise** (`AuthorizationError`) | Prevents any caller from accidentally proceeding past a denial. Fail closed, no silent fallback. |
+| Service-layer | **Structured error dict** | Allows the service to return a structured response to the tool, which can then surface the denial reason to the caller. |
 
 ### Audit event
 
 The `authorization_decided` activity event is the durable record of
 every authorization decision. It includes:
 
-- Caller context (`caller_project`, `caller_agent`)
+- Derived caller scope (`caller_project`, agent factor — including the
+  `agent:None` sentinel)
+- **`identity_source`** (`active-project` or `default-scope-fallback`)
 - Requested scope (`project`, `agent`)
 - Target `memory_id` (if applicable)
 - Outcome (`allow` or `deny`)
-- **Denial reason** (e.g., "scope mismatch", "missing caller context")
+- **Denial reason** (scope values and denial reasons only; no
+  credentials, secrets, or identity material beyond project name,
+  `agent_name`, and profile)
 
 This is consistent with ADR-0004's audit-durability principle and
 makes authorization decisions fully inspectable via the existing audit
@@ -127,19 +184,22 @@ references this model:
 
 - This is **NOT** a security boundary against a malicious Agent Zero
   host. The host is trusted.
-- This is **NOT** authentication. The host authenticates; Neuro Core 2
-  verifies the host's claim.
+- This is **NOT** caller authentication. `agent_name` and `profile` are
+  host-controlled binding factors, not credentials.
 - This is **NOT** a defense against a compromised tool implementation.
-  It is a defense against a misbehaving or buggy tool.
-- This does **NOT** prove authorization is "complete" or
-  "production-grade." It establishes a minimal, honest baseline that
-  addresses the maturity limit listed in Project Instructions §1.
+- This does **NOT** prove authorization is "complete,"
+  "production-grade," or a security mechanism. Host-level flag-enabled
+  functional effectiveness is validated by VAL (validation-report.yaml
+  rev 1, decision: pass, required_level: host, 5/5 ARC Condition 5
+  scenarios), but this does not establish security assurance,
+  adversarial resistance, or caller authentication. Concurrency and
+  performance under enforcement are explicitly not tested.
 
 ### Maturity limit
 
 The maturity-limit language **"authorization is unproven"** remains in
 Project Instructions §1 until a future work item escalates the claim
-with new evidence. This contract establishes a baseline; it does not
+with new evidence. Implementing the redesigned mechanism does not
 retire the maturity limit.
 
 ---
@@ -196,31 +256,48 @@ confirming each of the following:
       is sub-second (bounded diagnostic, n=5 queries, synthetic corpus,
       median ~657ms). This is a bounded diagnostic, not a full benchmark.
 
-### Authorization verification (per ADR-0007)
+### Authorization verification (per ADR-0008)
 
 The following items verify the authorization contract. These are
 **documentation-level checks** against this baseline; runtime
-verification requires the implementation work item to be authorized
-and completed.
+verification on the real dispatch path has passed at the integration
+level (VAL, 10/10 scenarios) and, after the completed ORC-authorized
+re-enable, at the host level with the flag enabled (VAL,
+validation-report.yaml rev 1, decision: pass, required_level: host,
+5/5 ARC Condition 5 scenarios).
 
-- [ ] This baseline documents the five-layer authorization model
-      (caller-context binding, tool-layer check, service-layer check,
-      memory-bound check for validate, authorization audit).
-- [ ] This baseline documents the breaking-additive contract change:
-      tools require a populated `self.agent` / `self.agent.context`
-      from the host, and fail closed if it is absent.
-- [ ] This baseline documents the error shape: hard raise at the
-      tool-layer (Layer 2), structured error dict at the service-layer
-      (Layer 3).
+- [ ] This baseline documents the derivation-based authorization model
+      (operator-optional Layer 0, plugin-side identity derivation, scope
+      binding with the `agent:None` sentinel, service-layer check,
+      authorization audit with `identity_source`).
+- [ ] This baseline documents the audited fallback with the
+      `identity_source` marker (`active-project` vs
+      `default-scope-fallback`) and the no-widening rule under fallback.
+- [ ] This baseline documents binding-not-authentication: `agent_name`
+      and `profile` are host-controlled binding factors, not
+      authenticated caller identity.
+- [ ] This baseline documents the canonical Layer 0 policy IDs together
+      with the dispatchable snake_case tool names, and the declared-name
+      dispatch mismatch as a known constraint.
+- [ ] This baseline documents the enforcement flag state
+      (`AUTHORIZATION_ENFORCEMENT_ACTIVE = True` in all three tools),
+      the one-flag rollback, and the completed staged re-enable (VAL
+      integration confirmation passed; the ORC-authorized re-enable
+      sub-step was executed; host-level flag-enabled validation passed —
+      validation-report.yaml rev 1, decision: pass, required_level:
+      host, 5/5 ARC Condition 5 scenarios).
 - [ ] This baseline documents the `authorization_decided` audit event
-      with denial reason.
+      with `identity_source` and denial reason, and the denial-event
+      content limit (scope values and denial reasons only).
 - [ ] This baseline preserves the explicit non-claims (not a security
-      boundary against malicious host, not authentication, not a
-      defense against compromised tool, not production-grade).
+      boundary against malicious host, not caller authentication, not a
+      defense against compromised tool, not production-grade or
+      host-level-effective).
 - [ ] This baseline preserves the maturity limit: "authorization is
       unproven" remains in Project Instructions §1.
-- [ ] ADR-0007 (`docs/decisions/0007-authorization-policy.md`) exists
-      and is referenced from this baseline.
+- [ ] ADR-0008 (`docs/decisions/0008-authorization-policy.md`) exists,
+      supersedes ADR-0007 in full, and is referenced from this baseline;
+      ADR-0007 is annotated superseded with content preserved.
 
 ---
 
@@ -231,6 +308,10 @@ and completed.
 - `docs/PROJECT_CONTINUITY.md` — current state and known debt.
 - `docs/validation/README.md` — index of validation evidence.
 - `docs/decisions/ADR-001-record-format.md` — durable decision records.
-- `docs/decisions/0007-authorization-policy.md` — authorization policy
-  (ADR-0007); authoritative record of the five-layer authorization
-  model and the breaking-additive contract change.
+- `docs/decisions/0008-authorization-policy.md` — authorization policy
+  (ADR-0008); authoritative record of the derivation-based authorization
+  model, the audited fallback with `identity_source`, the `agent:None`
+  sentinel semantics, and the enforcement flag state with the
+  completed staged re-enable.
+- `docs/decisions/0007-authorization-policy.md` — superseded predecessor
+  ADR (content preserved, status annotated).

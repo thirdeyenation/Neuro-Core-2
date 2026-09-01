@@ -24,14 +24,44 @@ following components are defined there:
 - **Activity ledger** (`activity_ledger.py`): append-only event log.
 - **Service** (`neuro_service.py`): composes capture, retrieve,
   validate, store, and activity.
+- **Caller identity** (`caller_identity.py`): plugin-side caller-identity
+  derivation (active-project with audited default-scope fallback and
+  `identity_source` markers) and Layer 2 scope binding with the
+  `agent:None` sentinel, per ADR-0008.
 - **Plugin** (`plugins/neuro_core_2/`): Agent Zero tools
   `NeuroCore2Capture`, `NeuroCore2Retrieve`, `NeuroCore2Validate`.
 
 ---
 
+### Authorization state note (2026-08-31)
+
+> **Current state (2026-09-01):** the redesigned authorization mechanism
+> is **implemented** in the plugin and covered by the test suite.
+> Enforcement is **ACTIVE** — `AUTHORIZATION_ENFORCEMENT_ACTIVE` is
+> `True` in all three tools (capture.py:35, retrieve.py:35,
+> validate.py:41). Host-level flag-enabled behavior has been **validated
+> by VAL** (validation-report.yaml rev 1, decision: pass,
+> required_level: host; 5/5 ARC Condition 5 scenarios on the real
+> dispatch path; raw probe evidence under
+> `.a0proj/notepad_temp/val/20260901T0910-AUTHZ-REENABLE-VALIDATION/`).
+> The earlier integration-level pass (10/10 scenarios) is retained as
+> historical context. Binding is not authentication; authorization
+> remains unproven as a security mechanism, and authorization-event
+> evidence (`identity_source`, `denial_reason`) lives on the in-memory
+> ActivityLedger and is not durably persisted across restart
+> (ADR-0004/ADR-0006).
+
+---
+
 ## Data flow
 
-1. Tools call `NeuroCoreService` with explicit `Scope(project, agent)`.
+1. Tools derive caller identity plugin-side from host inputs that exist
+   at dispatch (`caller_identity.py`), bind the requested
+   `Scope(project, agent)` against it, and call `NeuroCoreService` with
+   the bound scope. Enforcement is flag-gated
+   (`AUTHORIZATION_ENFORCEMENT_ACTIVE`, currently `True` — active in all
+   three tools; one-flag rollback to `False` restores the unenforced
+   functional state).
 2. Service writes to `MemoryStore` and appends to `ActivityLedger`.
 3. Retrieval ranks candidates lexically and by trust, returning factors.
 4. Superseded memories remain stored but are excluded from retrieval.
@@ -103,11 +133,16 @@ following components are defined there:
   The only concurrency guarantee is single-writer serialization via
   `BEGIN IMMEDIATE` plus `busy_timeout`.
 - Input-size controls or observability. (Authorization is no longer a
-  non-goal: a minimal five-layer authorization baseline is implemented
-  per `docs/decisions/0007-authorization-policy.md`, with explicit
-  non-claims — not a security boundary, not authentication, not
-  production-grade — and the maturity limit "authorization is unproven"
-  preserved in Project Instructions §1.)
+  non-goal: a derivation-based authorization model is implemented per
+  `docs/decisions/0008-authorization-policy.md` (ADR-0008, superseding
+  ADR-0007 in full), with explicit non-claims — not a security boundary,
+  not caller authentication, not production-grade — and the maturity
+  limit "authorization is unproven" preserved in Project Instructions
+  §1. Enforcement is ACTIVE (`AUTHORIZATION_ENFORCEMENT_ACTIVE = True`
+  in all three tools) and host-level flag-enabled behavior is validated
+  by VAL (validation-report.yaml rev 1, decision: pass,
+  required_level: host, 5/5 ARC Condition 5 scenarios); authorization
+  remains unproven as a security mechanism.)
 - Benchmark or competition claims.
 
 ---

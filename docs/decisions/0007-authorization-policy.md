@@ -2,7 +2,25 @@
 
 ## Status
 
-Accepted — 2026-08-29.
+**Superseded by [0008-authorization-policy.md](0008-authorization-policy.md) (ADR-0008) — 2026-08-31.**
+
+> **SUPERSEDED (2026-08-31):** This ADR is superseded **in full** by
+> [ADR-0008](0008-authorization-policy.md), the durable policy record of
+> `WI-2026-08-31-AUTHORIZATION-POLICY-REDESIGN` (S2). ADR-0007's Layer 1
+> host contract (host-populated `agent.context.caller_project`/`caller_agent`)
+> was empirically falsified on the real Agent Zero dispatch path; the
+> redesign inverts it into plugin-side derivation from host inputs that
+> verifiably exist at dispatch. The design content below is preserved
+> unmodified as the historical record and is annotated, not rewritten.
+> Historical notice (2026-08-31, pre-supersession): authorization
+> enforcement was disabled pending redesign — see
+> `WI-2026-08-31-AUTHORIZATION-POLICY-REDESIGN`, which supersedes
+> `WI-2026-08-28-AUTHORIZATION-POLICY-DESIGN`. The host does not populate
+> caller identity (`agent.context.caller_project`/`caller_agent`), so the
+> five-layer mechanism (including Layers 3–5) was inactive on the real
+> host dispatch path, and tools operated without authorization
+> enforcement. That notice was superseded by any statement below
+> describing the mechanism as functional only as a historical record.
 
 ## Context
 
